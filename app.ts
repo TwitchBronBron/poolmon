@@ -12,28 +12,167 @@ const PORT = process.env.PORT || 3000;
 // Database setup
 const db = new sqlite3.Database('pool_temperature.db');
 
+// Initialize database table
+db.serialize(() => {
+    db.run(`
+        CREATE TABLE IF NOT EXISTS temperature_readings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            temperature REAL NOT NULL,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+            location TEXT DEFAULT 'pool'
+        )
+    `);
+
+    // Create indexes for better query performance with large datasets
+    db.run(`CREATE INDEX IF NOT EXISTS idx_timestamp ON temperature_readings(timestamp)`);
+    db.run(`CREATE INDEX IF NOT EXISTS idx_location ON temperature_readings(location)`);
+    db.run(`CREATE INDEX IF NOT EXISTS idx_timestamp_location ON temperature_readings(timestamp, location)`);
+
+    // Set SQLite performance optimizations for large datasets
+    db.run(`PRAGMA journal_mode = WAL`); // Write-Ahead Logging for better concurrency
+    db.run(`PRAGMA synchronous = NORMAL`); // Faster than FULL, still safe
+    db.run(`PRAGMA cache_size = 10000`); // Increase cache size for better performance
+    db.run(`PRAGMA temp_store = MEMORY`); // Store temporary data in memory
+
+    // Insert dummy data if table is empty
+    db.get("SELECT COUNT(*) as count FROM temperature_readings", (err, row: any) => {
+        if (row.count === 0) {
+            console.log('Generating dummy temperature data for the past 2 years...');
+            const startTime = Date.now();
+
+            // generate dummy data to test the app
+            const dummyData = generateDummyData({
+                monthsAgo: 2,
+                intervalMinutes: 1
+            });
+
+            const generationTime = Date.now() - startTime;
+            console.log(`Data generation took ${(generationTime / 1000).toFixed(2)} seconds`);
+
+            console.log('Starting database insertion...');
+            const insertStartTime = Date.now();
+
+            // Use a transaction for much better performance
+            db.serialize(() => {
+                db.run("BEGIN TRANSACTION");
+
+                const stmt = db.prepare("INSERT INTO temperature_readings (temperature, location, timestamp) VALUES (?, ?, ?)");
+
+                let insertedCount = 0;
+                dummyData.forEach((data) => {
+                    stmt.run(data.temp, data.location, data.timestamp);
+                    insertedCount++;
+
+                    // Log progress every 100,000 insertions
+                    if (insertedCount % 100000 === 0) {
+                        console.log(`Inserted ${insertedCount.toLocaleString()} records...`);
+                    }
+                });
+
+                stmt.finalize((err) => {
+                    if (err) {
+                        console.error('Error finalizing statement:', err);
+                        db.run("ROLLBACK");
+                        return;
+                    }
+
+                    db.run("COMMIT", (err) => {
+                        if (err) {
+                            console.error('Error committing transaction:', err);
+                            return;
+                        }
+
+                        const insertionTime = Date.now() - insertStartTime;
+                        const totalTime = Date.now() - startTime;
+
+                        console.log(`Database insertion took ${(insertionTime / 1000).toFixed(2)} seconds`);
+                        console.log(`Total time: ${(totalTime / 1000).toFixed(2)} seconds`);
+                        console.log(`Successfully inserted ${dummyData.length.toLocaleString()} temperature readings`);
+                        console.log(`Average insertion rate: ${Math.round(dummyData.length / (insertionTime / 1000)).toLocaleString()} records/second`);
+                    });
+                });
+            });
+        } else {
+            console.log(`Database already contains ${row.count.toLocaleString()} temperature readings`);
+        }
+    });
+});
+
 // Function to generate realistic dummy data
-function generateDummyData() {
+function generateDummyData(options: {
+    monthsAgo: number;
+    intervalMinutes: number;
+}) {
+    const { monthsAgo, intervalMinutes } = options;
+
+    const endDate = new Date(); // Always end at current time
+    const startDate = new Date();
+    startDate.setMonth(startDate.getMonth() - monthsAgo);
+
+    const intervalMs = intervalMinutes * 60 * 1000;
+    const totalIntervals = Math.floor((endDate.getTime() - startDate.getTime()) / intervalMs);
+
+    console.log(`Starting to generate temperature data...`);
+    console.log(`Period: ${startDate.toISOString()} to ${endDate.toISOString()}`);
+    console.log(`Interval: ${intervalMinutes} minute(s)`);
+    console.log(`Will generate approximately ${totalIntervals * 2} temperature readings...`);
+
     const data = [];
-    const now = new Date();
-    const monthAgo = new Date(now.getTime() - (30 * 24 * 60 * 60 * 1000)); // 30 days ago
+    let recordCount = 0;
 
-    // Generate readings every 30 minutes for the past month
-    for (let time = monthAgo; time <= now; time = new Date(time.getTime() + 30 * 60 * 1000)) {
+    // Generate readings at specified intervals for the specified time range
+    let previousOutsideTemp = 72; // Track previous temperature for smoother transitions
+    let weatherPattern = Math.random(); // Random weather pattern for the period
+
+    for (let time = new Date(startDate); time <= endDate; time = new Date(time.getTime() + intervalMs)) {
         const timestamp = time.toISOString();
+        const dayOfYear = Math.floor((time.getTime() - new Date(time.getFullYear(), 0, 0).getTime()) / (24 * 60 * 60 * 1000));
 
-        // Generate realistic pool temperature (varies less, typically 75-85°F)
-        const basePoolTemp = 80;
-        const poolVariation = Math.sin(time.getHours() / 24 * Math.PI * 2) * 3; // Daily cycle
-        const poolNoise = (Math.random() - 0.5) * 2; // Small random variation
-        const poolTemp = basePoolTemp + poolVariation + poolNoise;
-
-        // Generate realistic outside temperature (varies more, seasonal + daily cycle)
+        // Generate realistic outside temperature with more variety
         const baseOutsideTemp = 72;
-        const dailyCycle = Math.sin((time.getHours() - 6) / 24 * Math.PI * 2) * 12; // Peak at 2PM
-        const seasonalVariation = Math.sin(time.getDate() / 30 * Math.PI) * 8; // Monthly variation
-        const outsideNoise = (Math.random() - 0.5) * 4; // More random variation
-        const outsideTemp = baseOutsideTemp + dailyCycle + seasonalVariation + outsideNoise;
+
+        // Seasonal variation (warmer in summer, colder in winter)
+        const seasonalVariation = Math.sin((dayOfYear / 365) * Math.PI * 2) * 25; // Stronger seasonal effect
+
+        // Daily cycle with more dramatic changes (coldest at 6AM, hottest at 3PM)
+        const hourOfDay = time.getHours() + time.getMinutes() / 60;
+        const dailyCycle = Math.sin((hourOfDay - 6) / 24 * Math.PI * 2) * 15; // Stronger daily cycle
+
+        // Day-to-day weather variation (some days are just hotter/colder)
+        const dayVariation = Math.sin((dayOfYear * 7) / 365 * Math.PI * 2) * 8; // Weekly-ish weather patterns
+
+        // Random weather events (cold fronts, heat waves, etc.)
+        weatherPattern += (Math.random() - 0.5) * 0.1; // Slowly changing weather pattern
+        weatherPattern = Math.max(-1, Math.min(1, weatherPattern)); // Keep in bounds
+        const weatherEffect = weatherPattern * 12; // Can add/subtract up to 12 degrees
+
+        // Hourly noise with some persistence (temperature doesn't change too quickly)
+        const hourlyNoise = (Math.random() - 0.5) * 3;
+
+        const targetOutsideTemp = baseOutsideTemp + seasonalVariation + dailyCycle + dayVariation + weatherEffect + hourlyNoise;
+
+        // Smooth temperature transitions (temperature can't change too rapidly)
+        const maxChange = 2; // Maximum temperature change per interval
+        const tempDiff = targetOutsideTemp - previousOutsideTemp;
+        const actualChange = Math.max(-maxChange, Math.min(maxChange, tempDiff));
+        const outsideTemp = previousOutsideTemp + actualChange;
+        previousOutsideTemp = outsideTemp;
+
+        // Generate realistic pool temperature (varies less, influenced by outside temp)
+        const basePoolTemp = 80;
+
+        // Pool responds slower to temperature changes
+        const poolSeasonalVariation = seasonalVariation * 0.3; // Less seasonal effect
+        const poolDailyVariation = dailyCycle * 0.2; // Less daily variation
+
+        // Pool temperature is somewhat influenced by outside temperature
+        const outsideTempInfluence = (outsideTemp - baseOutsideTemp) * 0.1;
+
+        // Pool heating/cooling patterns (warmer during day due to sun, cooler at night)
+        const poolHeatCycle = Math.sin((hourOfDay - 12) / 24 * Math.PI * 2) * 2; // Peak heating at noon
+
+        const poolNoise = (Math.random() - 0.5) * 1.5; // Less noise for pool
+        const poolTemp = basePoolTemp + poolSeasonalVariation + poolDailyVariation + outsideTempInfluence + poolHeatCycle + poolNoise;
 
         // Add both readings with the same timestamp
         data.push({
@@ -47,37 +186,18 @@ function generateDummyData() {
             location: 'outside',
             timestamp: timestamp
         });
+
+        recordCount += 2;
+
+        // Log progress every 100,000 records
+        if (recordCount % 100000 === 0) {
+            console.log(`Generated ${recordCount.toLocaleString()} records...`);
+        }
     }
 
+    console.log(`Finished generating ${recordCount.toLocaleString()} total temperature readings`);
     return data;
 }
-
-// Initialize database table
-db.serialize(() => {
-    db.run(`
-        CREATE TABLE IF NOT EXISTS temperature_readings (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            temperature REAL NOT NULL,
-            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-            location TEXT DEFAULT 'pool'
-        )
-    `);
-
-    // Insert dummy data if table is empty
-    db.get("SELECT COUNT(*) as count FROM temperature_readings", (err, row: any) => {
-        if (row.count === 0) {
-            console.log('Generating dummy temperature data for the past month...');
-            const dummyData = generateDummyData();
-
-            const stmt = db.prepare("INSERT INTO temperature_readings (temperature, location, timestamp) VALUES (?, ?, ?)");
-            dummyData.forEach((data) => {
-                stmt.run(data.temp, data.location, data.timestamp);
-            });
-            stmt.finalize();
-            console.log(`Inserted ${dummyData.length} temperature readings`);
-        }
-    });
-});
 
 // Middleware
 app.use(express.json());
@@ -391,7 +511,7 @@ app.post('/api/temperatures', (req, res) => {
     db.run(
         'INSERT INTO temperature_readings (temperature, location) VALUES (?, ?)',
         [temperature, location],
-        function(err) {
+        function (err) {
             if (err) {
                 res.status(500).json({ error: err.message });
                 return;
