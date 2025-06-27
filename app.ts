@@ -85,7 +85,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 // API Routes
 app.get('/api/temperatures', (req, res) => {
-    const period = req.query.period || 'day'; // day, week, month, year
+    const period = req.query.period || 'day'; // hourly, day, week, month, year
     const offset = parseInt(req.query.offset as string) || 0; // -1 = previous, 0 = current, 1 = next
     const location = req.query.location;
 
@@ -96,6 +96,11 @@ app.get('/api/temperatures', (req, res) => {
     // Calculate date ranges based on period and offset
     const getDateRange = (period: string, offset: number) => {
         switch (period) {
+            case 'hourly':
+                return {
+                    start: `datetime('now', '${offset - 1} hour')`,
+                    end: `datetime('now', '${offset} hour')`
+                };
             case 'day':
                 return {
                     start: `datetime('now', '${offset - 1} day')`,
@@ -129,6 +134,29 @@ app.get('/api/temperatures', (req, res) => {
 
     // Determine grouping and date format based on period
     switch (period) {
+        case 'hourly':
+            // Return raw data for hourly view (no aggregation)
+            let rawQuery = `
+                SELECT temperature, location, timestamp, 1 as reading_count
+                FROM temperature_readings
+                WHERE timestamp >= ${dateRange.start} AND timestamp < ${dateRange.end}
+            `;
+
+            if (location) {
+                rawQuery += ` AND location = '${location}'`;
+            }
+
+            rawQuery += ` ORDER BY timestamp DESC LIMIT ${req.query.limit || 100}`;
+
+            db.all(rawQuery, (err, rows) => {
+                if (err) {
+                    res.status(500).json({ error: err.message });
+                    return;
+                }
+                res.json(rows || []);
+            });
+            return;
+
         case 'day':
             // Group by hour for daily view
             dateFormat = "strftime('%Y-%m-%d %H:00:00', timestamp)";
@@ -224,6 +252,11 @@ app.get('/api/temperatures/stats', (req, res) => {
     // Calculate date ranges based on period and offset
     const getDateRange = (period: string, offset: number) => {
         switch (period) {
+            case 'hourly':
+                return {
+                    start: `datetime('now', '${offset - 1} hour')`,
+                    end: `datetime('now', '${offset} hour')`
+                };
             case 'day':
                 return {
                     start: `datetime('now', '${offset - 1} day')`,
@@ -281,6 +314,52 @@ app.get('/api/temperatures/stats', (req, res) => {
     });
 });
 
+app.get('/api/temperatures/raw', (req, res) => {
+    const timestamp = req.query.timestamp as string;
+    const location = req.query.location as string;
+
+    if (!timestamp || !location) {
+        res.status(400).json({ error: 'Timestamp and location are required' });
+        return;
+    }
+
+    // Parse the aggregated timestamp to determine the time range
+    const targetDate = new Date(timestamp);
+    const currentPeriod = req.query.period || 'day'; // This should be passed from frontend
+
+    let startTime: Date, endTime: Date;
+
+    // Determine the time range based on the aggregated timestamp format
+    if (timestamp.includes(':00:00')) {
+        // Hourly aggregation (day view) - show all readings in that hour
+        startTime = new Date(targetDate);
+        endTime = new Date(targetDate.getTime() + 60 * 60 * 1000); // Add 1 hour
+    } else {
+        // Daily aggregation (week/month view) - show all readings in that day
+        startTime = new Date(targetDate);
+        startTime.setHours(0, 0, 0, 0);
+        endTime = new Date(targetDate);
+        endTime.setHours(23, 59, 59, 999);
+    }
+
+    const query = `
+        SELECT temperature, timestamp
+        FROM temperature_readings
+        WHERE location = ?
+        AND timestamp >= ?
+        AND timestamp < ?
+        ORDER BY timestamp ASC
+    `;
+
+    db.all(query, [location, startTime.toISOString(), endTime.toISOString()], (err, rows) => {
+        if (err) {
+            res.status(500).json({ error: err.message });
+            return;
+        }
+        res.json(rows || []);
+    });
+});
+
 app.post('/api/temperatures', (req, res) => {
     const { temperature, location = 'pool' } = req.body;
 
@@ -297,33 +376,12 @@ app.post('/api/temperatures', (req, res) => {
                 res.status(500).json({ error: err.message });
                 return;
             }
-            res.json({
-                id: this.lastID,
-                message: 'Temperature reading added successfully'
-            });
+            res.json({ id: this.lastID, temperature, location });
         }
     );
 });
 
-// Serve the main page
-app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
-
-// Start server
+// Start the server
 app.listen(PORT, () => {
-    console.log(`Pool temperature server running on http://localhost:${PORT}`);
-});
-
-// Graceful shutdown
-process.on('SIGINT', () => {
-    console.log('\nShutting down gracefully...');
-    db.close((err) => {
-        if (err) {
-            console.error('Error closing database:', err.message);
-        } else {
-            console.log('Database connection closed.');
-        }
-        process.exit(0);
-    });
+    console.log(`Server is running on port ${PORT}`);
 });
