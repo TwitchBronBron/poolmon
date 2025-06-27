@@ -822,7 +822,15 @@
                         hour12: true
                     })}` : 'No data available';
 
-                // Load statistics for selected period
+                // Update chart first (higher priority)
+                await updateChart();
+
+                // Only load readings table if it's currently expanded
+                if (readingsExpanded) {
+                    loadReadingsTable();
+                }
+
+                // Load statistics for selected period (lower priority, load after chart)
                 const poolStatsResponse = await fetch(`/api/temperatures/stats${periodParam}&location=pool`);
                 const poolStats = await poolStatsResponse.json();
 
@@ -849,14 +857,6 @@
                 document.getElementById('outsideMinTemp2').textContent = outsideStats.min_temp ? outsideStats.min_temp.toFixed(1) + '°F' : '--';
                 document.getElementById('outsideMaxTemp2').textContent = outsideStats.max_temp ? outsideStats.max_temp.toFixed(1) + '°F' : '--';
                 document.getElementById('outsideReadings2').textContent = outsideStats.total_readings || 0;
-
-                // Only load readings table if it's currently expanded
-                if (readingsExpanded) {
-                    loadReadingsTable();
-                }
-
-                // Update chart
-                updateChart();
 
             } catch (error) {
                 console.error('Error loading data:', error);
