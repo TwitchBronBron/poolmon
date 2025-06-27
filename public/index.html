@@ -55,8 +55,20 @@
             margin-bottom: 30px;
         }
 
-        .stats-card-mobile {
-            display: none;
+        .period-controls {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 30px;
+            flex-wrap: nowrap;
+        }
+
+        .current-period {
+            font-weight: 600;
+            color: #333;
+            min-width: 150px;
+            text-align: center;
         }
 
         .card {
@@ -88,7 +100,7 @@
 
         .stats-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
             gap: 15px;
             margin-top: 15px;
         }
@@ -110,15 +122,6 @@
             font-size: 0.9em;
             color: #666;
             margin-top: 5px;
-        }
-
-        .period-controls {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            gap: 10px;
-            margin-bottom: 30px;
-            flex-wrap: nowrap;
         }
 
         .period-buttons {
@@ -172,13 +175,6 @@
         .nav-btn:hover {
             border-color: #667eea;
             background: #f8f9ff;
-        }
-
-        .current-period {
-            font-weight: 600;
-            color: #333;
-            min-width: 150px;
-            text-align: center;
         }
 
         .chart-container {
@@ -290,6 +286,39 @@
             background: #f8f9ff !important;
         }
 
+        /* Color utility classes */
+        .pool-color {
+            color: #667eea;
+        }
+
+        .outside-color {
+            color: #f39c12;
+        }
+
+        .pool-bg {
+            background-color: #667eea;
+        }
+
+        .outside-bg {
+            background-color: #f39c12;
+        }
+
+        .text-muted {
+            color: #ccc;
+        }
+
+        .text-gray {
+            color: #666;
+        }
+
+        .pool-temp-display {
+            color: #667eea;
+        }
+
+        .outside-temp-display {
+            color: #f39c12;
+        }
+
         @media (max-width: 768px) {
             .container {
                 padding: 10px;
@@ -312,14 +341,6 @@
             .dashboard-top {
                 grid-template-columns: 1fr;
                 gap: 20px;
-            }
-
-            .stats-card {
-                display: none;
-            }
-
-            .stats-card-mobile {
-                display: block !important;
             }
 
             .period-controls {
@@ -349,6 +370,23 @@
                 padding: 15px;
             }
 
+            .stats-grid {
+                grid-template-columns: repeat(3, 1fr);
+                gap: 8px;
+            }
+
+            .stat-item {
+                padding: 10px 5px;
+            }
+
+            .stat-value {
+                font-size: 1em;
+            }
+
+            .stat-label {
+                font-size: 0.8em;
+            }
+
             .card h3 + div[style*="grid-template-columns: 1fr 1fr"] {
                 grid-template-columns: 1fr !important;
                 gap: 20px !important;
@@ -374,51 +412,51 @@
                 <h3>Current Temperatures</h3>
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
                     <div style="text-align: center;">
-                        <div class="temperature-display" id="poolTemp">
+                        <div class="temperature-display pool-temp-display" id="poolTemp">
                             --<span class="temperature-unit">°F</span>
                         </div>
-                        <div style="color: #667eea; font-weight: 600;">Pool</div>
+                        <div class="pool-color" style="font-weight: 600;">Pool</div>
                     </div>
                     <div style="text-align: center;">
-                        <div class="temperature-display" id="outsideTemp" style="color: #f39c12;">
+                        <div class="temperature-display outside-temp-display" id="outsideTemp">
                             --<span class="temperature-unit">°F</span>
                         </div>
-                        <div style="color: #f39c12; font-weight: 600;">Outside</div>
+                        <div class="outside-color" style="font-weight: 600;">Outside</div>
                     </div>
                 </div>
             </div>
 
             <div class="card stats-card">
-                <h3>Statistics</h3>
+                <h3>Stats</h3>
                 <div style="display: flex; justify-content: center; align-items: center; gap: 20px; margin-bottom: 20px;">
                     <div style="display: flex; align-items: center; gap: 10px;">
-                        <div style="width: 20px; height: 3px; background: #667eea; border-radius: 2px;"></div>
-                        <span style="color: #667eea; font-weight: 600;">Pool</span>
+                        <div class="pool-bg" style="width: 20px; height: 3px; border-radius: 2px;"></div>
+                        <span class="pool-color" style="font-weight: 600;">Pool</span>
                     </div>
                     <div style="display: flex; align-items: center; gap: 10px;">
-                        <div style="width: 20px; height: 3px; background: #f39c12; border-radius: 2px;"></div>
-                        <span style="color: #f39c12; font-weight: 600;">Outside</span>
+                        <div class="outside-bg" style="width: 20px; height: 3px; border-radius: 2px;"></div>
+                        <span class="outside-color" style="font-weight: 600;">Outside</span>
                     </div>
                 </div>
                 <div class="stats-grid">
                     <div class="stat-item">
                         <div style="display: flex; flex-direction: column; gap: 5px;">
-                            <div class="stat-value" id="poolAvgTemp" style="color: #667eea;">--</div>
-                            <div class="stat-value" id="outsideAvgTemp" style="color: #f39c12;">--</div>
+                            <div class="stat-value pool-color" id="poolAvgTemp">--</div>
+                            <div class="stat-value outside-color" id="outsideAvgTemp">--</div>
                         </div>
                         <div class="stat-label">Average</div>
                     </div>
                     <div class="stat-item">
                         <div style="display: flex; flex-direction: column; gap: 5px;">
-                            <div class="stat-value" id="poolMinTemp" style="color: #667eea;">--</div>
-                            <div class="stat-value" id="outsideMinTemp" style="color: #f39c12;">--</div>
+                            <div class="stat-value pool-color" id="poolMinTemp">--</div>
+                            <div class="stat-value outside-color" id="outsideMinTemp">--</div>
                         </div>
                         <div class="stat-label">Minimum</div>
                     </div>
                     <div class="stat-item">
                         <div style="display: flex; flex-direction: column; gap: 5px;">
-                            <div class="stat-value" id="poolMaxTemp" style="color: #667eea;">--</div>
-                            <div class="stat-value" id="outsideMaxTemp" style="color: #f39c12;">--</div>
+                            <div class="stat-value pool-color" id="poolMaxTemp">--</div>
+                            <div class="stat-value outside-color" id="outsideMaxTemp">--</div>
                         </div>
                         <div class="stat-label">Maximum</div>
                     </div>
@@ -445,43 +483,6 @@
         <div class="chart-container">
             <h3>Temperature Chart</h3>
             <canvas id="temperatureChart"></canvas>
-        </div>
-
-        <div class="card stats-card-mobile" style="margin-top: 20px; display: none;">
-            <h3>Statistics</h3>
-            <div style="display: flex; justify-content: center; align-items: center; gap: 20px; margin-bottom: 20px;">
-                <div style="display: flex; align-items: center; gap: 10px;">
-                    <div style="width: 20px; height: 3px; background: #667eea; border-radius: 2px;"></div>
-                    <span style="color: #667eea; font-weight: 600;">Pool</span>
-                </div>
-                <div style="display: flex; align-items: center; gap: 10px;">
-                    <div style="width: 20px; height: 3px; background: #f39c12; border-radius: 2px;"></div>
-                    <span style="color: #f39c12; font-weight: 600;">Outside</span>
-                </div>
-            </div>
-            <div class="stats-grid">
-                <div class="stat-item">
-                    <div style="display: flex; flex-direction: column; gap: 5px;">
-                        <div class="stat-value" id="poolAvgTemp2" style="color: #667eea;">--</div>
-                        <div class="stat-value" id="outsideAvgTemp2" style="color: #f39c12;">--</div>
-                    </div>
-                    <div class="stat-label">Average</div>
-                </div>
-                <div class="stat-item">
-                    <div style="display: flex; flex-direction: column; gap: 5px;">
-                        <div class="stat-value" id="poolMinTemp2" style="color: #667eea;">--</div>
-                        <div class="stat-value" id="outsideMinTemp2" style="color: #f39c12;">--</div>
-                    </div>
-                    <div class="stat-label">Minimum</div>
-                </div>
-                <div class="stat-item">
-                    <div style="display: flex; flex-direction: column; gap: 5px;">
-                        <div class="stat-value" id="poolMaxTemp2" style="color: #667eea;">--</div>
-                        <div class="stat-value" id="outsideMaxTemp2" style="color: #f39c12;">--</div>
-                    </div>
-                    <div class="stat-label">Maximum</div>
-                </div>
-            </div>
         </div>
 
         <div class="readings-table">
@@ -593,8 +594,8 @@
                             loadData();
                         };
 
-                        const poolTemp = poolReading ? `<strong style="color: #667eea;">${poolReading.temperature.toFixed(1)}°F</strong>` : '<span style="color: #ccc;">N/A</span>';
-                        const outsideTemp = outsideReading ? `<strong style="color: #f39c12;">${outsideReading.temperature.toFixed(1)}°F</strong>` : '<span style="color: #ccc;">N/A</span>';
+                        const poolTemp = poolReading ? `<strong class="pool-color">${poolReading.temperature.toFixed(1)}°F</strong>` : '<span class="text-muted">N/A</span>';
+                        const outsideTemp = outsideReading ? `<strong class="outside-color">${outsideReading.temperature.toFixed(1)}°F</strong>` : '<span class="text-muted">N/A</span>';
 
                         row.innerHTML = `
                             <td>${poolTemp}</td>
@@ -614,9 +615,9 @@
                     // For non-hourly views, use the original single-row format
                     readings.forEach(reading => {
                         const row = tbody.insertRow();
-                        const tempColor = reading.location === 'pool' ? '#667eea' : '#f39c12';
+                        const tempColorClass = reading.location === 'pool' ? 'pool-color' : 'outside-color';
                         const isAverage = reading.reading_count && reading.reading_count > 1;
-                        const avgIndicator = isAverage ? ` <span style="font-size: 0.8em; color: #666;">(avg of ${reading.reading_count} readings)</span>` : '';
+                        const avgIndicator = isAverage ? ` <span class="text-gray" style="font-size: 0.8em;">(avg of ${reading.reading_count} readings)</span>` : '';
 
                         row.className = 'clickable-row';
                         row.style.cursor = 'pointer';
@@ -657,8 +658,8 @@
                         // For non-hourly views, show in separate columns but maintain original location-based format
                         if (reading.location === 'pool') {
                             row.innerHTML = `
-                                <td><strong style="color: ${tempColor};">${reading.temperature.toFixed(1)}°F</strong>${avgIndicator}</td>
-                                <td><span style="color: #ccc;">--</span></td>
+                                <td><strong class="${tempColorClass}">${reading.temperature.toFixed(1)}°F</strong>${avgIndicator}</td>
+                                <td><span class="text-muted">--</span></td>
                                 <td>${new Date(reading.timestamp).toLocaleString('en-US', {
                                     year: 'numeric',
                                     month: 'short',
@@ -671,8 +672,8 @@
                             `;
                         } else {
                             row.innerHTML = `
-                                <td><span style="color: #ccc;">--</span></td>
-                                <td><strong style="color: ${tempColor};">${reading.temperature.toFixed(1)}°F</strong>${avgIndicator}</td>
+                                <td><span class="text-muted">--</span></td>
+                                <td><strong class="${tempColorClass}">${reading.temperature.toFixed(1)}°F</strong>${avgIndicator}</td>
                                 <td>${new Date(reading.timestamp).toLocaleString('en-US', {
                                     year: 'numeric',
                                     month: 'short',
@@ -818,15 +819,6 @@
                 document.getElementById('outsideAvgTemp').textContent = outsideStats.avg_temp ? outsideStats.avg_temp.toFixed(1) + '°F' : '--';
                 document.getElementById('outsideMinTemp').textContent = outsideStats.min_temp ? outsideStats.min_temp.toFixed(1) + '°F' : '--';
                 document.getElementById('outsideMaxTemp').textContent = outsideStats.max_temp ? outsideStats.max_temp.toFixed(1) + '°F' : '--';
-
-                // Update mobile statistics
-                document.getElementById('poolAvgTemp2').textContent = poolStats.avg_temp ? poolStats.avg_temp.toFixed(1) + '°F' : '--';
-                document.getElementById('poolMinTemp2').textContent = poolStats.min_temp ? poolStats.min_temp.toFixed(1) + '°F' : '--';
-                document.getElementById('poolMaxTemp2').textContent = poolStats.max_temp ? poolStats.max_temp.toFixed(1) + '°F' : '--';
-
-                document.getElementById('outsideAvgTemp2').textContent = outsideStats.avg_temp ? outsideStats.avg_temp.toFixed(1) + '°F' : '--';
-                document.getElementById('outsideMinTemp2').textContent = outsideStats.min_temp ? outsideStats.min_temp.toFixed(1) + '°F' : '--';
-                document.getElementById('outsideMaxTemp2').textContent = outsideStats.max_temp ? outsideStats.max_temp.toFixed(1) + '°F' : '--';
 
             } catch (error) {
                 console.error('Error loading data:', error);
