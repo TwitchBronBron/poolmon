@@ -423,13 +423,6 @@
                         </div>
                         <div class="stat-label">Maximum</div>
                     </div>
-                    <div class="stat-item">
-                        <div style="display: flex; flex-direction: column; gap: 5px;">
-                            <div class="stat-value" id="poolReadings" style="color: #667eea;">--</div>
-                            <div class="stat-value" id="outsideReadings" style="color: #f39c12;">--</div>
-                        </div>
-                        <div class="stat-label">Readings</div>
-                    </div>
                 </div>
             </div>
         </div>
@@ -488,13 +481,6 @@
                         <div class="stat-value" id="outsideMaxTemp2" style="color: #f39c12;">--</div>
                     </div>
                     <div class="stat-label">Maximum</div>
-                </div>
-                <div class="stat-item">
-                    <div style="display: flex; flex-direction: column; gap: 5px;">
-                        <div class="stat-value" id="poolReadings2" style="color: #667eea;">--</div>
-                        <div class="stat-value" id="outsideReadings2" style="color: #f39c12;">--</div>
-                    </div>
-                    <div class="stat-label">Readings</div>
                 </div>
             </div>
         </div>
@@ -840,23 +826,19 @@
                 document.getElementById('poolAvgTemp').textContent = poolStats.avg_temp ? poolStats.avg_temp.toFixed(1) + '°F' : '--';
                 document.getElementById('poolMinTemp').textContent = poolStats.min_temp ? poolStats.min_temp.toFixed(1) + '°F' : '--';
                 document.getElementById('poolMaxTemp').textContent = poolStats.max_temp ? poolStats.max_temp.toFixed(1) + '°F' : '--';
-                document.getElementById('poolReadings').textContent = poolStats.total_readings || 0;
 
                 document.getElementById('outsideAvgTemp').textContent = outsideStats.avg_temp ? outsideStats.avg_temp.toFixed(1) + '°F' : '--';
                 document.getElementById('outsideMinTemp').textContent = outsideStats.min_temp ? outsideStats.min_temp.toFixed(1) + '°F' : '--';
                 document.getElementById('outsideMaxTemp').textContent = outsideStats.max_temp ? outsideStats.max_temp.toFixed(1) + '°F' : '--';
-                document.getElementById('outsideReadings').textContent = outsideStats.total_readings || 0;
 
                 // Update mobile statistics
                 document.getElementById('poolAvgTemp2').textContent = poolStats.avg_temp ? poolStats.avg_temp.toFixed(1) + '°F' : '--';
                 document.getElementById('poolMinTemp2').textContent = poolStats.min_temp ? poolStats.min_temp.toFixed(1) + '°F' : '--';
                 document.getElementById('poolMaxTemp2').textContent = poolStats.max_temp ? poolStats.max_temp.toFixed(1) + '°F' : '--';
-                document.getElementById('poolReadings2').textContent = poolStats.total_readings || 0;
 
                 document.getElementById('outsideAvgTemp2').textContent = outsideStats.avg_temp ? outsideStats.avg_temp.toFixed(1) + '°F' : '--';
                 document.getElementById('outsideMinTemp2').textContent = outsideStats.min_temp ? outsideStats.min_temp.toFixed(1) + '°F' : '--';
                 document.getElementById('outsideMaxTemp2').textContent = outsideStats.max_temp ? outsideStats.max_temp.toFixed(1) + '°F' : '--';
-                document.getElementById('outsideReadings2').textContent = outsideStats.total_readings || 0;
 
             } catch (error) {
                 console.error('Error loading data:', error);

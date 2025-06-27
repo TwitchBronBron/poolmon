@@ -439,8 +439,7 @@ app.get('/api/temperatures/stats', (req, res) => {
         SELECT
             AVG(temperature) as avg_temp,
             MIN(temperature) as min_temp,
-            MAX(temperature) as max_temp,
-            COUNT(*) as total_readings
+            MAX(temperature) as max_temp
         FROM temperature_readings
         ${whereClause}
     `;
