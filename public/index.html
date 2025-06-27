@@ -222,6 +222,17 @@
         .refresh-btn {
             float: right;
             margin-bottom: 15px;
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .refresh-btn:hover {
+            background: #5a67d8;
         }
 
         .timestamp {
@@ -386,8 +397,8 @@
             <button class="nav-btn" id="prevBtn">‹</button>
 
             <div class="period-buttons">
-                <button class="period-btn" data-period="hourly">Hourly</button>
-                <button class="period-btn active" data-period="day">Day</button>
+                <button class="period-btn active" data-period="hourly">Hourly</button>
+                <button class="period-btn" data-period="day">Day</button>
                 <button class="period-btn" data-period="week">Week</button>
                 <button class="period-btn" data-period="month">Month</button>
                 <button class="period-btn" data-period="year">Year</button>
@@ -450,7 +461,7 @@
         <div class="readings-table">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
                 <h3>Recent Readings</h3>
-                <button class="btn refresh-btn" onclick="loadData()">Refresh</button>
+                <button class="refresh-btn" onclick="loadData()">Refresh</button>
             </div>
             <table id="readingsTable">
                 <thead>
@@ -633,33 +644,29 @@
 
                     // Navigate to more detailed view when clicked
                     row.onclick = () => {
+                        const readingDate = new Date(reading.timestamp);
+                        const now = new Date();
+
                         if (currentPeriod === 'year') {
-                            // Year -> Month
+                            // Year -> Month: Calculate month offset
                             currentPeriod = 'month';
-                            const readingDate = new Date(reading.timestamp);
-                            const now = new Date();
-                            currentOffset = readingDate.getMonth() - now.getMonth() + (readingDate.getFullYear() - now.getFullYear()) * 12;
-                        } else if (currentPeriod === 'month') {
-                            // Month -> Day
+                            const yearDiff = readingDate.getFullYear() - now.getFullYear();
+                            const monthDiff = readingDate.getMonth() - now.getMonth();
+                            currentOffset = yearDiff * 12 + monthDiff;
+                        } else if (currentPeriod === 'month' || currentPeriod === 'week') {
+                            // Month/Week -> Day: Calculate day offset
                             currentPeriod = 'day';
-                            const readingDate = new Date(reading.timestamp);
-                            const now = new Date();
-                            const daysDiff = Math.floor((readingDate - now) / (1000 * 60 * 60 * 24));
-                            currentOffset = daysDiff;
-                        } else if (currentPeriod === 'week') {
-                            // Week -> Day
-                            currentPeriod = 'day';
-                            const readingDate = new Date(reading.timestamp);
-                            const now = new Date();
-                            const daysDiff = Math.floor((readingDate - now) / (1000 * 60 * 60 * 24));
-                            currentOffset = daysDiff;
+                            // Reset time to start of day for accurate comparison
+                            const readingDay = new Date(readingDate.getFullYear(), readingDate.getMonth(), readingDate.getDate());
+                            const nowDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                            currentOffset = Math.round((readingDay - nowDay) / (1000 * 60 * 60 * 24));
                         } else if (currentPeriod === 'day') {
-                            // Day -> Hourly
+                            // Day -> Hourly: Calculate hour offset
                             currentPeriod = 'hourly';
-                            const readingDate = new Date(reading.timestamp);
-                            const now = new Date();
-                            const hoursDiff = Math.floor((readingDate - now) / (1000 * 60 * 60));
-                            currentOffset = hoursDiff;
+                            // Reset minutes and seconds for accurate comparison
+                            const readingHour = new Date(readingDate.getFullYear(), readingDate.getMonth(), readingDate.getDate(), readingDate.getHours());
+                            const nowHour = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours());
+                            currentOffset = Math.round((readingHour - nowHour) / (1000 * 60 * 60));
                         }
 
                         // Update active button

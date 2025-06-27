@@ -136,19 +136,30 @@ app.get('/api/temperatures', (req, res) => {
     switch (period) {
         case 'hourly':
             // Return raw data for hourly view (no aggregation)
+            const startTime = new Date();
+            startTime.setHours(startTime.getHours() + offset - 1);
+            startTime.setMinutes(0, 0, 0);
+
+            const endTime = new Date();
+            endTime.setHours(endTime.getHours() + offset);
+            endTime.setMinutes(0, 0, 0);
+
             let rawQuery = `
                 SELECT temperature, location, timestamp, 1 as reading_count
                 FROM temperature_readings
-                WHERE timestamp >= ${dateRange.start} AND timestamp < ${dateRange.end}
+                WHERE timestamp >= ? AND timestamp < ?
             `;
 
+            const queryParams = [startTime.toISOString(), endTime.toISOString()];
+
             if (location) {
-                rawQuery += ` AND location = '${location}'`;
+                rawQuery += ` AND location = ?`;
+                queryParams.push(location as string);
             }
 
             rawQuery += ` ORDER BY timestamp DESC LIMIT ${req.query.limit || 100}`;
 
-            db.all(rawQuery, (err, rows) => {
+            db.all(rawQuery, queryParams, (err, rows) => {
                 if (err) {
                     res.status(500).json({ error: err.message });
                     return;
@@ -249,50 +260,59 @@ app.get('/api/temperatures/stats', (req, res) => {
     let whereClause = '';
     let params: any[] = [];
 
-    // Calculate date ranges based on period and offset
-    const getDateRange = (period: string, offset: number) => {
-        switch (period) {
-            case 'hourly':
-                return {
-                    start: `datetime('now', '${offset - 1} hour')`,
-                    end: `datetime('now', '${offset} hour')`
-                };
-            case 'day':
-                return {
-                    start: `datetime('now', '${offset - 1} day')`,
-                    end: `datetime('now', '${offset} day')`
-                };
-            case 'week':
-                const weekOffset = offset * 7;
-                return {
-                    start: `datetime('now', '${weekOffset - 7} day')`,
-                    end: `datetime('now', '${weekOffset} day')`
-                };
-            case 'month':
-                return {
-                    start: `datetime('now', 'start of month', '${offset} month')`,
-                    end: `datetime('now', 'start of month', '${offset + 1} month')`
-                };
-            case 'year':
-                return {
-                    start: `datetime('now', 'start of year', '${offset} year')`,
-                    end: `datetime('now', 'start of year', '${offset + 1} year')`
-                };
-            default:
-                return {
-                    start: `datetime('now', '-1 day')`,
-                    end: `datetime('now')`
-                };
-        }
-    };
+    if (period === 'hourly') {
+        // Use JavaScript date calculation for hourly (consistent with main endpoint)
+        const startTime = new Date();
+        startTime.setHours(startTime.getHours() + offset - 1);
+        startTime.setMinutes(0, 0, 0);
 
-    const dateRange = getDateRange(period as string, offset);
-    whereClause = `WHERE timestamp >= ${dateRange.start} AND timestamp < ${dateRange.end}`;
+        const endTime = new Date();
+        endTime.setHours(endTime.getHours() + offset);
+        endTime.setMinutes(0, 0, 0);
+
+        whereClause = `WHERE timestamp >= ? AND timestamp < ?`;
+        params = [startTime.toISOString(), endTime.toISOString()];
+    } else {
+        // Use SQLite date functions for other periods
+        const getDateRange = (period: string, offset: number) => {
+            switch (period) {
+                case 'day':
+                    return {
+                        start: `datetime('now', '${offset - 1} day')`,
+                        end: `datetime('now', '${offset} day')`
+                    };
+                case 'week':
+                    const weekOffset = offset * 7;
+                    return {
+                        start: `datetime('now', '${weekOffset - 7} day')`,
+                        end: `datetime('now', '${weekOffset} day')`
+                    };
+                case 'month':
+                    return {
+                        start: `datetime('now', 'start of month', '${offset} month')`,
+                        end: `datetime('now', 'start of month', '${offset + 1} month')`
+                    };
+                case 'year':
+                    return {
+                        start: `datetime('now', 'start of year', '${offset} year')`,
+                        end: `datetime('now', 'start of year', '${offset + 1} year')`
+                    };
+                default:
+                    return {
+                        start: `datetime('now', '-1 day')`,
+                        end: `datetime('now')`
+                    };
+            }
+        };
+
+        const dateRange = getDateRange(period as string, offset);
+        whereClause = `WHERE timestamp >= ${dateRange.start} AND timestamp < ${dateRange.end}`;
+    }
 
     // Add location filter if specified
     if (location) {
         whereClause += ' AND location = ?';
-        params.push(location);
+        params.push(location as string);
     }
 
     const query = `
