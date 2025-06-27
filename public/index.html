@@ -177,6 +177,19 @@
             background: #f8f9ff;
         }
 
+        .nav-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            border-color: #ddd;
+            background: #f5f5f5;
+            color: #999;
+        }
+
+        .nav-btn:disabled:hover {
+            border-color: #ddd;
+            background: #f5f5f5;
+        }
+
         .chart-container {
             background: white;
             border-radius: 15px;
@@ -715,8 +728,11 @@
             });
 
             document.getElementById('nextBtn').addEventListener('click', function() {
-                currentOffset++;
-                loadData();
+                // Don't allow navigating into the future
+                if (currentOffset < 0) {
+                    currentOffset++;
+                    loadData();
+                }
             });
 
             // Auto-refresh every 30 seconds (only for current period)
@@ -778,6 +794,12 @@
             }
         }
 
+        function updateNavigationButtons() {
+            const nextBtn = document.getElementById('nextBtn');
+            // Disable next button if we're at the current period (offset = 0)
+            nextBtn.disabled = (currentOffset >= 0);
+        }
+
         async function loadData() {
             document.getElementById('currentPeriod').textContent = getPeriodLabel();
 
@@ -819,6 +841,9 @@
                 document.getElementById('outsideAvgTemp').textContent = outsideStats.avg_temp ? outsideStats.avg_temp.toFixed(1) + '°F' : '--';
                 document.getElementById('outsideMinTemp').textContent = outsideStats.min_temp ? outsideStats.min_temp.toFixed(1) + '°F' : '--';
                 document.getElementById('outsideMaxTemp').textContent = outsideStats.max_temp ? outsideStats.max_temp.toFixed(1) + '°F' : '--';
+
+                // Update navigation button states
+                updateNavigationButtons();
 
             } catch (error) {
                 console.error('Error loading data:', error);
