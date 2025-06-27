@@ -277,7 +277,7 @@ app.get('/api/temperatures', (req, res) => {
                 queryParams.push(location as string);
             }
 
-            rawQuery += ` ORDER BY timestamp DESC LIMIT ${req.query.limit || 100}`;
+            rawQuery += ` ORDER BY timestamp DESC`;
 
             db.all(rawQuery, queryParams, (err, rows) => {
                 if (err) {
