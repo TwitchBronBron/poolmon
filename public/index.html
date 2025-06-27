@@ -530,9 +530,7 @@
                         hour12: true
                     });
 
-                    if (currentOffset === 0) return `${hourName} (This Hour)`;
-                    if (currentOffset === -1) return `${hourName} (Last Hour)`;
-                    if (currentOffset === 1) return `${hourName} (Next Hour)`;
+                    if (currentOffset === 0) return `${hourName} (now)`;
                     return hourName;
 
                 case 'day':
@@ -540,27 +538,30 @@
                     const dayName = targetDate.toLocaleDateString('en-US', { weekday: 'long' });
                     const monthDay = targetDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
 
-                    if (currentOffset === 0) return `${dayName} ${monthDay} (Today)`;
-                    if (currentOffset === -1) return `${dayName} ${monthDay} (Yesterday)`;
-                    if (currentOffset === 1) return `${dayName} ${monthDay} (Tomorrow)`;
+                    if (currentOffset === 0) return `${dayName} ${monthDay} (today)`;
+                    if (currentOffset === -1) return `${dayName} ${monthDay} (yesterday)`;
                     return `${dayName} ${monthDay}`;
 
                 case 'week':
                     targetDate.setDate(now.getDate() + (currentOffset * 7));
-                    if (currentOffset === 0) return 'This Week';
-                    if (currentOffset === -1) return 'Last Week';
-                    if (currentOffset === 1) return 'Next Week';
-                    return `Week of ${targetDate.toLocaleDateString()}`;
+                    const weekText = `Week of ${targetDate.toLocaleDateString()}`;
+                    if (currentOffset === 0) return `${weekText} (this week)`;
+                    if (currentOffset === -1) return `${weekText} (last week)`;
+                    return weekText;
 
                 case 'month':
                     targetDate.setMonth(now.getMonth() + currentOffset);
-                    if (currentOffset === 0) return 'This Month';
-                    return targetDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+                    const monthText = targetDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+                    if (currentOffset === 0) return `${monthText} (this month)`;
+                    if (currentOffset === -1) return `${monthText} (last month)`;
+                    return monthText;
 
                 case 'year':
                     targetDate.setFullYear(now.getFullYear() + currentOffset);
-                    if (currentOffset === 0) return 'This Year';
-                    return targetDate.getFullYear().toString();
+                    const yearText = targetDate.getFullYear().toString();
+                    if (currentOffset === 0) return `${yearText} (this year)`;
+                    if (currentOffset === -1) return `${yearText} (last year)`;
+                    return yearText;
 
                 default:
                     return 'Current Period';
