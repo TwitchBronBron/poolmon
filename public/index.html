@@ -198,6 +198,47 @@
             margin-top: 20px;
         }
 
+        .readings-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .readings-header h3 {
+            margin: 0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .collapse-icon {
+            transition: transform 0.3s ease;
+            font-size: 1.2em;
+            color: #667eea;
+        }
+
+        .collapse-icon.expanded {
+            transform: rotate(90deg);
+        }
+
+        .readings-content {
+            overflow: hidden;
+            transition: max-height 0.3s ease, opacity 0.3s ease;
+        }
+
+        .readings-content.collapsed {
+            max-height: 0;
+            opacity: 0;
+        }
+
+        .readings-content.expanded {
+            max-height: 1000px;
+            opacity: 1;
+        }
+
         table {
             width: 100%;
             border-collapse: collapse;
@@ -459,20 +500,25 @@
         </div>
 
         <div class="readings-table">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                <h3>Recent Readings</h3>
-                <button class="refresh-btn" onclick="loadData()">Refresh</button>
+            <div class="readings-header" onclick="toggleReadings()">
+                <h3>
+                    <span class="collapse-icon">▶</span>
+                    Recent Readings
+                </h3>
+                <button class="refresh-btn" onclick="event.stopPropagation(); loadReadingsTable()" style="display: none;" id="readingsRefreshBtn">Refresh</button>
             </div>
-            <table id="readingsTable">
-                <thead>
-                    <tr>
-                        <th>Pool Temp</th>
-                        <th>Outside Temp</th>
-                        <th>Date & Time</th>
-                    </tr>
-                </thead>
-                <tbody></tbody>
-            </table>
+            <div class="readings-content collapsed" id="readingsContent">
+                <table id="readingsTable">
+                    <thead>
+                        <tr>
+                            <th>Pool Temp</th>
+                            <th>Outside Temp</th>
+                            <th>Date & Time</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
         </div>
     </div>
 
@@ -481,6 +527,184 @@
         let temperatureChart;
         let currentPeriod = 'hourly';
         let currentOffset = 0; // 0 = current, -1 = previous, 1 = next
+        let readingsExpanded = false; // Track if readings table is expanded
+
+        // Toggle readings table visibility
+        function toggleReadings() {
+            const content = document.getElementById('readingsContent');
+            const icon = document.querySelector('.collapse-icon');
+            const refreshBtn = document.getElementById('readingsRefreshBtn');
+
+            readingsExpanded = !readingsExpanded;
+
+            if (readingsExpanded) {
+                content.classList.remove('collapsed');
+                content.classList.add('expanded');
+                icon.classList.add('expanded');
+                refreshBtn.style.display = 'block';
+                // Load readings table content when expanded
+                loadReadingsTable();
+            } else {
+                content.classList.remove('expanded');
+                content.classList.add('collapsed');
+                icon.classList.remove('expanded');
+                refreshBtn.style.display = 'none';
+            }
+        }
+
+        // Load readings table data (separate from main loadData function)
+        async function loadReadingsTable() {
+            const periodParam = `?period=${currentPeriod}&offset=${currentOffset}`;
+
+            try {
+                // Load recent readings for selected period
+                const readingsUrl = `/api/temperatures${periodParam}&limit=20`;
+                const readingsResponse = await fetch(readingsUrl);
+                const readings = await readingsResponse.json();
+
+                const tbody = document.querySelector('#readingsTable tbody');
+                tbody.innerHTML = '';
+
+                // Group readings by timestamp for hourly view
+                if (currentPeriod === 'hourly') {
+                    const groupedReadings = {};
+                    readings.forEach(reading => {
+                        if (!groupedReadings[reading.timestamp]) {
+                            groupedReadings[reading.timestamp] = {};
+                        }
+                        groupedReadings[reading.timestamp][reading.location] = reading;
+                    });
+
+                    // Sort timestamps in descending order (most recent first)
+                    const sortedTimestamps = Object.keys(groupedReadings).sort((a, b) => new Date(b) - new Date(a));
+
+                    sortedTimestamps.forEach(timestamp => {
+                        const group = groupedReadings[timestamp];
+                        const poolReading = group.pool;
+                        const outsideReading = group.outside;
+
+                        const row = tbody.insertRow();
+                        row.className = 'clickable-row';
+                        row.style.cursor = 'pointer';
+
+                        // Navigate to more detailed view when clicked
+                        row.onclick = () => {
+                            const readingDate = new Date(timestamp);
+                            const now = new Date();
+
+                            if (currentPeriod === 'day') {
+                                // Day -> Hourly: Calculate hour offset
+                                currentPeriod = 'hourly';
+                                const readingHour = new Date(readingDate.getFullYear(), readingDate.getMonth(), readingDate.getDate(), readingDate.getHours());
+                                const nowHour = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours());
+                                currentOffset = Math.round((readingHour - nowHour) / (1000 * 60 * 60));
+                            }
+
+                            // Update active button
+                            document.querySelectorAll('.period-btn').forEach(btn => btn.classList.remove('active'));
+                            const activeBtn = document.querySelector(`[data-period="${currentPeriod}"]`);
+                            if (activeBtn) activeBtn.classList.add('active');
+
+                            loadData();
+                        };
+
+                        const poolTemp = poolReading ? `<strong style="color: #667eea;">${poolReading.temperature.toFixed(1)}°F</strong>` : '<span style="color: #ccc;">N/A</span>';
+                        const outsideTemp = outsideReading ? `<strong style="color: #f39c12;">${outsideReading.temperature.toFixed(1)}°F</strong>` : '<span style="color: #ccc;">N/A</span>';
+
+                        row.innerHTML = `
+                            <td>${poolTemp}</td>
+                            <td>${outsideTemp}</td>
+                            <td>${new Date(timestamp).toLocaleString('en-US', {
+                                year: 'numeric',
+                                month: 'short',
+                                day: 'numeric',
+                                hour: 'numeric',
+                                minute: '2-digit',
+                                second: '2-digit',
+                                hour12: true
+                            })}</td>
+                        `;
+                    });
+                } else {
+                    // For non-hourly views, use the original single-row format
+                    readings.forEach(reading => {
+                        const row = tbody.insertRow();
+                        const tempColor = reading.location === 'pool' ? '#667eea' : '#f39c12';
+                        const isAverage = reading.reading_count && reading.reading_count > 1;
+                        const avgIndicator = isAverage ? ` <span style="font-size: 0.8em; color: #666;">(avg of ${reading.reading_count} readings)</span>` : '';
+
+                        row.className = 'clickable-row';
+                        row.style.cursor = 'pointer';
+
+                        // Navigate to more detailed view when clicked
+                        row.onclick = () => {
+                            const readingDate = new Date(reading.timestamp);
+                            const now = new Date();
+
+                            if (currentPeriod === 'year') {
+                                // Year -> Month: Calculate month offset
+                                currentPeriod = 'month';
+                                const yearDiff = readingDate.getFullYear() - now.getFullYear();
+                                const monthDiff = readingDate.getMonth() - now.getMonth();
+                                currentOffset = yearDiff * 12 + monthDiff;
+                            } else if (currentPeriod === 'month' || currentPeriod === 'week') {
+                                // Month/Week -> Day: Calculate day offset
+                                currentPeriod = 'day';
+                                const readingDay = new Date(readingDate.getFullYear(), readingDate.getMonth(), readingDate.getDate());
+                                const nowDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                                currentOffset = Math.round((readingDay - nowDay) / (1000 * 60 * 60 * 24));
+                            } else if (currentPeriod === 'day') {
+                                // Day -> Hourly: Calculate hour offset
+                                currentPeriod = 'hourly';
+                                const readingHour = new Date(readingDate.getFullYear(), readingDate.getMonth(), readingDate.getDate(), readingDate.getHours());
+                                const nowHour = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours());
+                                currentOffset = Math.round((readingHour - nowHour) / (1000 * 60 * 60));
+                            }
+
+                            // Update active button
+                            document.querySelectorAll('.period-btn').forEach(btn => btn.classList.remove('active'));
+                            const activeBtn = document.querySelector(`[data-period="${currentPeriod}"]`);
+                            if (activeBtn) activeBtn.classList.add('active');
+
+                            loadData();
+                        };
+
+                        // For non-hourly views, show in separate columns but maintain original location-based format
+                        if (reading.location === 'pool') {
+                            row.innerHTML = `
+                                <td><strong style="color: ${tempColor};">${reading.temperature.toFixed(1)}°F</strong>${avgIndicator}</td>
+                                <td><span style="color: #ccc;">--</span></td>
+                                <td>${new Date(reading.timestamp).toLocaleString('en-US', {
+                                    year: 'numeric',
+                                    month: 'short',
+                                    day: 'numeric',
+                                    hour: 'numeric',
+                                    minute: '2-digit',
+                                    second: currentPeriod === 'hourly' ? '2-digit' : undefined,
+                                    hour12: true
+                                })}</td>
+                            `;
+                        } else {
+                            row.innerHTML = `
+                                <td><span style="color: #ccc;">--</span></td>
+                                <td><strong style="color: ${tempColor};">${reading.temperature.toFixed(1)}°F</strong>${avgIndicator}</td>
+                                <td>${new Date(reading.timestamp).toLocaleString('en-US', {
+                                    year: 'numeric',
+                                    month: 'short',
+                                    day: 'numeric',
+                                    hour: 'numeric',
+                                    minute: '2-digit',
+                                    second: currentPeriod === 'hourly' ? '2-digit' : undefined,
+                                    hour12: true
+                                })}</td>
+                            `;
+                        }
+                    });
+                }
+            } catch (error) {
+                console.error('Error loading readings table:', error);
+            }
+        }
 
         // Initialize the app
         document.addEventListener('DOMContentLoaded', function() {
@@ -626,149 +850,9 @@
                 document.getElementById('outsideMaxTemp2').textContent = outsideStats.max_temp ? outsideStats.max_temp.toFixed(1) + '°F' : '--';
                 document.getElementById('outsideReadings2').textContent = outsideStats.total_readings || 0;
 
-                // Load recent readings for selected period
-                const readingsUrl = `/api/temperatures${periodParam}&limit=20`;
-                const readingsResponse = await fetch(readingsUrl);
-                const readings = await readingsResponse.json();
-
-                const tbody = document.querySelector('#readingsTable tbody');
-                tbody.innerHTML = '';
-
-                // Group readings by timestamp for hourly view
-                if (currentPeriod === 'hourly') {
-                    const groupedReadings = {};
-                    readings.forEach(reading => {
-                        if (!groupedReadings[reading.timestamp]) {
-                            groupedReadings[reading.timestamp] = {};
-                        }
-                        groupedReadings[reading.timestamp][reading.location] = reading;
-                    });
-
-                    // Sort timestamps in descending order (most recent first)
-                    const sortedTimestamps = Object.keys(groupedReadings).sort((a, b) => new Date(b) - new Date(a));
-
-                    sortedTimestamps.forEach(timestamp => {
-                        const group = groupedReadings[timestamp];
-                        const poolReading = group.pool;
-                        const outsideReading = group.outside;
-
-                        const row = tbody.insertRow();
-                        row.className = 'clickable-row';
-                        row.style.cursor = 'pointer';
-
-                        // Navigate to more detailed view when clicked
-                        row.onclick = () => {
-                            const readingDate = new Date(timestamp);
-                            const now = new Date();
-
-                            if (currentPeriod === 'day') {
-                                // Day -> Hourly: Calculate hour offset
-                                currentPeriod = 'hourly';
-                                const readingHour = new Date(readingDate.getFullYear(), readingDate.getMonth(), readingDate.getDate(), readingDate.getHours());
-                                const nowHour = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours());
-                                currentOffset = Math.round((readingHour - nowHour) / (1000 * 60 * 60));
-                            }
-
-                            // Update active button
-                            document.querySelectorAll('.period-btn').forEach(btn => btn.classList.remove('active'));
-                            const activeBtn = document.querySelector(`[data-period="${currentPeriod}"]`);
-                            if (activeBtn) activeBtn.classList.add('active');
-
-                            loadData();
-                        };
-
-                        const poolTemp = poolReading ? `<strong style="color: #667eea;">${poolReading.temperature.toFixed(1)}°F</strong>` : '<span style="color: #ccc;">N/A</span>';
-                        const outsideTemp = outsideReading ? `<strong style="color: #f39c12;">${outsideReading.temperature.toFixed(1)}°F</strong>` : '<span style="color: #ccc;">N/A</span>';
-
-                        row.innerHTML = `
-                            <td>${poolTemp}</td>
-                            <td>${outsideTemp}</td>
-                            <td>${new Date(timestamp).toLocaleString('en-US', {
-                                year: 'numeric',
-                                month: 'short',
-                                day: 'numeric',
-                                hour: 'numeric',
-                                minute: '2-digit',
-                                second: '2-digit',
-                                hour12: true
-                            })}</td>
-                        `;
-                    });
-                } else {
-                    // For non-hourly views, use the original single-row format
-                    readings.forEach(reading => {
-                        const row = tbody.insertRow();
-                        const tempColor = reading.location === 'pool' ? '#667eea' : '#f39c12';
-                        const isAverage = reading.reading_count && reading.reading_count > 1;
-                        const avgIndicator = isAverage ? ` <span style="font-size: 0.8em; color: #666;">(avg of ${reading.reading_count} readings)</span>` : '';
-
-                        row.className = 'clickable-row';
-                        row.style.cursor = 'pointer';
-
-                        // Navigate to more detailed view when clicked
-                        row.onclick = () => {
-                            const readingDate = new Date(reading.timestamp);
-                            const now = new Date();
-
-                            if (currentPeriod === 'year') {
-                                // Year -> Month: Calculate month offset
-                                currentPeriod = 'month';
-                                const yearDiff = readingDate.getFullYear() - now.getFullYear();
-                                const monthDiff = readingDate.getMonth() - now.getMonth();
-                                currentOffset = yearDiff * 12 + monthDiff;
-                            } else if (currentPeriod === 'month' || currentPeriod === 'week') {
-                                // Month/Week -> Day: Calculate day offset
-                                currentPeriod = 'day';
-                                const readingDay = new Date(readingDate.getFullYear(), readingDate.getMonth(), readingDate.getDate());
-                                const nowDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-                                currentOffset = Math.round((readingDay - nowDay) / (1000 * 60 * 60 * 24));
-                            } else if (currentPeriod === 'day') {
-                                // Day -> Hourly: Calculate hour offset
-                                currentPeriod = 'hourly';
-                                const readingHour = new Date(readingDate.getFullYear(), readingDate.getMonth(), readingDate.getDate(), readingDate.getHours());
-                                const nowHour = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours());
-                                currentOffset = Math.round((readingHour - nowHour) / (1000 * 60 * 60));
-                            }
-
-                            // Update active button
-                            document.querySelectorAll('.period-btn').forEach(btn => btn.classList.remove('active'));
-                            const activeBtn = document.querySelector(`[data-period="${currentPeriod}"]`);
-                            if (activeBtn) activeBtn.classList.add('active');
-
-                            loadData();
-                        };
-
-                        // For non-hourly views, show in separate columns but maintain original location-based format
-                        if (reading.location === 'pool') {
-                            row.innerHTML = `
-                                <td><strong style="color: ${tempColor};">${reading.temperature.toFixed(1)}°F</strong>${avgIndicator}</td>
-                                <td><span style="color: #ccc;">--</span></td>
-                                <td>${new Date(reading.timestamp).toLocaleString('en-US', {
-                                    year: 'numeric',
-                                    month: 'short',
-                                    day: 'numeric',
-                                    hour: 'numeric',
-                                    minute: '2-digit',
-                                    second: currentPeriod === 'hourly' ? '2-digit' : undefined,
-                                    hour12: true
-                                })}</td>
-                            `;
-                        } else {
-                            row.innerHTML = `
-                                <td><span style="color: #ccc;">--</span></td>
-                                <td><strong style="color: ${tempColor};">${reading.temperature.toFixed(1)}°F</strong>${avgIndicator}</td>
-                                <td>${new Date(reading.timestamp).toLocaleString('en-US', {
-                                    year: 'numeric',
-                                    month: 'short',
-                                    day: 'numeric',
-                                    hour: 'numeric',
-                                    minute: '2-digit',
-                                    second: currentPeriod === 'hourly' ? '2-digit' : undefined,
-                                    hour12: true
-                                })}</td>
-                            `;
-                        }
-                    });
+                // Only load readings table if it's currently expanded
+                if (readingsExpanded) {
+                    loadReadingsTable();
                 }
 
                 // Update chart
