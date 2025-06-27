@@ -386,7 +386,6 @@
                         <div style="color: #f39c12; font-weight: 600;">Outside</div>
                     </div>
                 </div>
-                <div class="timestamp" id="lastUpdate"></div>
             </div>
 
             <div class="card stats-card">
@@ -796,17 +795,6 @@
 
                 document.getElementById('outsideTemp').innerHTML =
                     outsideData.temperature ? `${outsideData.temperature.toFixed(1)}<span class="temperature-unit">°F</span>` : '--<span class="temperature-unit">°F</span>';
-
-                const lastUpdate = poolData.timestamp || outsideData.timestamp;
-                document.getElementById('lastUpdate').textContent = lastUpdate ?
-                    `Last updated: ${new Date(lastUpdate).toLocaleString('en-US', {
-                        year: 'numeric',
-                        month: 'short',
-                        day: 'numeric',
-                        hour: 'numeric',
-                        minute: '2-digit',
-                        hour12: true
-                    })}` : 'No data available';
 
                 // Update chart first (higher priority)
                 await updateChart();
