@@ -28,11 +28,32 @@ db.serialize(() => {
     db.run(`CREATE INDEX IF NOT EXISTS idx_location ON temperature_readings(location)`);
     db.run(`CREATE INDEX IF NOT EXISTS idx_timestamp_location ON temperature_readings(timestamp, location)`);
 
+    // Add more specific indexes for common query patterns
+    db.run(`CREATE INDEX IF NOT EXISTS idx_location_timestamp_desc ON temperature_readings(location, timestamp DESC)`);
+    db.run(`CREATE INDEX IF NOT EXISTS idx_timestamp_desc ON temperature_readings(timestamp DESC)`);
+
+    // Covering indexes that include temperature to avoid table lookups
+    db.run(`CREATE INDEX IF NOT EXISTS idx_covering_stats ON temperature_readings(timestamp, location, temperature)`);
+    db.run(`CREATE INDEX IF NOT EXISTS idx_covering_latest ON temperature_readings(location, timestamp DESC, temperature)`);
+
     // Set SQLite performance optimizations for large datasets
     db.run(`PRAGMA journal_mode = WAL`); // Write-Ahead Logging for better concurrency
     db.run(`PRAGMA synchronous = NORMAL`); // Faster than FULL, still safe
-    db.run(`PRAGMA cache_size = 10000`); // Increase cache size for better performance
+    db.run(`PRAGMA cache_size = 20000`); // Increase cache size further for better performance
     db.run(`PRAGMA temp_store = MEMORY`); // Store temporary data in memory
+    db.run(`PRAGMA mmap_size = 268435456`); // Use memory-mapped I/O (256MB)
+    db.run(`PRAGMA optimize`); // Run SQLite query planner optimizations
+
+    // Run ANALYZE to update SQLite's internal statistics for better query planning
+    setTimeout(() => {
+        db.run(`ANALYZE`, (err) => {
+            if (err) {
+                console.error('Error running ANALYZE:', err);
+            } else {
+                console.log('Database statistics updated for optimal query planning');
+            }
+        });
+    }, 5000); // Run after initial data load
 
     // Insert dummy data if table is empty
     db.get("SELECT COUNT(*) as count FROM temperature_readings", (err, row: any) => {
@@ -42,7 +63,7 @@ db.serialize(() => {
 
             // generate dummy data to test the app
             const dummyData = generateDummyData({
-                monthsAgo: 2,
+                monthsAgo: 24,
                 intervalMinutes: 1
             });
 
