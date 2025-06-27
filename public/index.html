@@ -519,8 +519,132 @@
     <script>
         let temperatureChart;
         let currentPeriod = 'hourly';
-        let currentOffset = 0; // 0 = current, -1 = previous, 1 = next
+        let currentStartDate = null; // Will be calculated based on period
+        let currentEndDate = null; // Will be calculated based on period
         let readingsExpanded = false; // Track if readings table is expanded
+
+        // Calculate date range for current period
+        function getCurrentDateRange(period) {
+            const now = new Date();
+            let start, end;
+
+            switch (period) {
+                case 'hourly':
+                    start = new Date(now);
+                    start.setMinutes(0, 0, 0);
+                    end = new Date(start);
+                    end.setHours(end.getHours() + 1);
+                    break;
+                case 'day':
+                    start = new Date(now);
+                    start.setHours(0, 0, 0, 0);
+                    end = new Date(start);
+                    end.setDate(end.getDate() + 1);
+                    break;
+                case 'week':
+                    start = new Date(now);
+                    start.setDate(start.getDate() - start.getDay()); // Start of current week (Sunday)
+                    start.setHours(0, 0, 0, 0);
+                    end = new Date(start);
+                    end.setDate(end.getDate() + 7);
+                    break;
+                case 'month':
+                    start = new Date(now.getFullYear(), now.getMonth(), 1);
+                    end = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+                    break;
+                case 'year':
+                    start = new Date(now.getFullYear(), 0, 1);
+                    end = new Date(now.getFullYear() + 1, 0, 1);
+                    break;
+                default:
+                    start = new Date(now);
+                    start.setHours(0, 0, 0, 0);
+                    end = new Date(start);
+                    end.setDate(end.getDate() + 1);
+            }
+
+            return { start, end };
+        }
+
+        // Navigate to previous period
+        function navigateToPrevious() {
+            const start = new Date(currentStartDate);
+            const end = new Date(currentEndDate);
+
+            switch (currentPeriod) {
+                case 'hourly':
+                    start.setHours(start.getHours() - 1);
+                    end.setHours(end.getHours() - 1);
+                    break;
+                case 'day':
+                    start.setDate(start.getDate() - 1);
+                    end.setDate(end.getDate() - 1);
+                    break;
+                case 'week':
+                    start.setDate(start.getDate() - 7);
+                    end.setDate(end.getDate() - 7);
+                    break;
+                case 'month':
+                    start.setMonth(start.getMonth() - 1);
+                    end.setMonth(end.getMonth() - 1);
+                    break;
+                case 'year':
+                    start.setFullYear(start.getFullYear() - 1);
+                    end.setFullYear(end.getFullYear() - 1);
+                    break;
+            }
+
+            currentStartDate = start;
+            currentEndDate = end;
+        }
+
+        // Navigate to next period
+        function navigateToNext() {
+            const start = new Date(currentStartDate);
+            const end = new Date(currentEndDate);
+
+            switch (currentPeriod) {
+                case 'hourly':
+                    start.setHours(start.getHours() + 1);
+                    end.setHours(end.getHours() + 1);
+                    break;
+                case 'day':
+                    start.setDate(start.getDate() + 1);
+                    end.setDate(end.getDate() + 1);
+                    break;
+                case 'week':
+                    start.setDate(start.getDate() + 7);
+                    end.setDate(end.getDate() + 7);
+                    break;
+                case 'month':
+                    start.setMonth(start.getMonth() + 1);
+                    end.setMonth(end.getMonth() + 1);
+                    break;
+                case 'year':
+                    start.setFullYear(start.getFullYear() + 1);
+                    end.setFullYear(end.getFullYear() + 1);
+                    break;
+            }
+
+            currentStartDate = start;
+            currentEndDate = end;
+        }
+
+        // Check if we're viewing the current period (to prevent future navigation)
+        function isCurrentPeriod() {
+            const now = new Date();
+            const currentRange = getCurrentDateRange(currentPeriod);
+
+            // Check if the current date range overlaps with "now"
+            return currentEndDate > now && currentStartDate <= now;
+        }
+
+        // Initialize date range for current period
+        function initializeDateRange() {
+            const range = getCurrentDateRange(currentPeriod);
+            currentStartDate = range.start;
+            currentEndDate = range.end;
+        }
 
         // Toggle readings table visibility
         function toggleReadings() {
@@ -547,136 +671,106 @@
 
         // Load readings table data (separate from main loadData function)
         async function loadReadingsTable() {
-            const periodParam = `?period=${currentPeriod}&offset=${currentOffset}`;
+            if (!readingsExpanded) return; // Don't load if collapsed
 
             try {
-                // Load recent readings for selected period
-                const readingsUrl = `/api/temperatures${periodParam}&limit=20`;
-                const readingsResponse = await fetch(readingsUrl);
-                const readings = await readingsResponse.json();
+                const startDateParam = currentStartDate.toISOString();
+                const endDateParam = currentEndDate.toISOString();
 
-                const tbody = document.querySelector('#readingsTable tbody');
-                tbody.innerHTML = '';
+                const response = await fetch(`/api/temperatures?period=${currentPeriod}&startDate=${startDateParam}&endDate=${endDateParam}`);
+                const data = await response.json();
 
-                // Group readings by timestamp for all views
+                const tableBody = document.querySelector('#readingsTable tbody');
+
+                if (data.length === 0) {
+                    tableBody.innerHTML = '<tr><td colspan="3" class="text-center text-muted">No readings found for this period</td></tr>';
+                    return;
+                }
+
+                // Group readings by timestamp (combining pool and outside readings)
                 const groupedReadings = {};
-                readings.forEach(reading => {
-                    if (!groupedReadings[reading.timestamp]) {
-                        groupedReadings[reading.timestamp] = {};
+                data.forEach(reading => {
+                    const timestamp = reading.timestamp;
+                    if (!groupedReadings[timestamp]) {
+                        groupedReadings[timestamp] = {
+                            timestamp: timestamp,
+                            pool: null,
+                            outside: null
+                        };
                     }
-                    groupedReadings[reading.timestamp][reading.location] = reading;
+                    groupedReadings[timestamp][reading.location] = reading.temperature;
                 });
 
-                // Sort timestamps in descending order (most recent first)
-                const sortedTimestamps = Object.keys(groupedReadings).sort((a, b) => new Date(b) - new Date(a));
+                // Convert to array and sort by timestamp (newest first)
+                const sortedReadings = Object.values(groupedReadings)
+                    .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
 
-                sortedTimestamps.forEach(timestamp => {
-                    const group = groupedReadings[timestamp];
-                    const poolReading = group.pool;
-                    const outsideReading = group.outside;
+                // Generate table rows
+                let tableHTML = '';
+                sortedReadings.forEach(reading => {
+                    const date = new Date(reading.timestamp);
+                    let formattedDate;
 
-                    const row = tbody.insertRow();
-                    row.className = 'clickable-row';
-                    row.style.cursor = 'pointer';
+                    // Format date based on current period
+                    switch (currentPeriod) {
+                        case 'year':
+                            formattedDate = date.toLocaleDateString('en-US', {
+                                year: 'numeric',
+                                month: 'short'
+                            });
+                            break;
+                        case 'month':
+                        case 'week':
+                            formattedDate = date.toLocaleDateString('en-US', {
+                                year: 'numeric',
+                                month: 'short',
+                                day: 'numeric'
+                            });
+                            break;
+                        case 'day':
+                            formattedDate = date.toLocaleDateString('en-US', {
+                                year: 'numeric',
+                                month: 'short',
+                                day: 'numeric',
+                                hour: 'numeric',
+                                hour12: true
+                            });
+                            break;
+                        case 'hourly':
+                            formattedDate = date.toLocaleDateString('en-US', {
+                                year: 'numeric',
+                                month: 'short',
+                                day: 'numeric',
+                                hour: 'numeric',
+                                minute: '2-digit',
+                                hour12: true
+                            });
+                            break;
+                        default:
+                            formattedDate = date.toLocaleDateString('en-US', {
+                                year: 'numeric',
+                                month: 'short',
+                                day: 'numeric',
+                                hour: 'numeric',
+                                minute: '2-digit',
+                                hour12: true
+                            });
+                    }
 
-                    // Navigate to more detailed view when clicked
-                    row.onclick = () => {
-                        const readingDate = new Date(timestamp);
-                        const now = new Date();
+                    const poolTemp = reading.pool !== null ? `${reading.pool.toFixed(1)}°F` : '--';
+                    const outsideTemp = reading.outside !== null ? `${reading.outside.toFixed(1)}°F` : '--';
 
-                        if (currentPeriod === 'year') {
-                            // Year -> Month: Calculate month offset
-                            currentPeriod = 'month';
-                            const yearDiff = readingDate.getFullYear() - now.getFullYear();
-                            const monthDiff = readingDate.getMonth() - now.getMonth();
-                            currentOffset = yearDiff * 12 + monthDiff;
-                        } else if (currentPeriod === 'month' || currentPeriod === 'week') {
-                            // Month/Week -> Day: Calculate day offset
-                            currentPeriod = 'day';
-                            const readingDay = new Date(readingDate.getFullYear(), readingDate.getMonth(), readingDate.getDate());
-                            const nowDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-                            currentOffset = Math.round((readingDay - nowDay) / (1000 * 60 * 60 * 24));
-                        } else if (currentPeriod === 'day') {
-                            // Day -> Hourly: Calculate hour offset
-                            currentPeriod = 'hourly';
-                            const readingHour = new Date(readingDate.getFullYear(), readingDate.getMonth(), readingDate.getDate(), readingDate.getHours());
-                            const nowHour = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours());
-                            currentOffset = Math.round((readingHour - nowHour) / (1000 * 60 * 60));
-                        }
-
-                        // Update active button
-                        document.querySelectorAll('.period-btn').forEach(btn => btn.classList.remove('active'));
-                        const activeBtn = document.querySelector(`[data-period="${currentPeriod}"]`);
-                        if (activeBtn) activeBtn.classList.add('active');
-
-                        loadData();
-                    };
-
-                    // Format temperatures with average indicators if applicable
-                    const poolTemp = poolReading ?
-                        `<strong class="pool-color">${poolReading.temperature.toFixed(1)}°F</strong>${poolReading.reading_count && poolReading.reading_count > 1 ? ` <span class="text-gray" style="font-size: 0.8em;"></span>` : ''}` :
-                        '<span class="text-muted">N/A</span>';
-
-                    const outsideTemp = outsideReading ?
-                        `<strong class="outside-color">${outsideReading.temperature.toFixed(1)}°F</strong>${outsideReading.reading_count && outsideReading.reading_count > 1 ? ` <span class="text-gray" style="font-size: 0.8em;"></span>` : ''}` :
-                        '<span class="text-muted">N/A</span>';
-
-                    row.innerHTML = `
-                        <td>${poolTemp}</td>
-                        <td>${outsideTemp}</td>
-                        <td>${new Date(timestamp).toLocaleString('en-US', (() => {
-                            switch (currentPeriod) {
-                                case 'hourly':
-                                    return {
-                                        weekday: 'short',
-                                        year: 'numeric',
-                                        month: 'short',
-                                        day: 'numeric',
-                                        hour: 'numeric',
-                                        minute: '2-digit',
-                                        hour12: true
-                                    };
-                                case 'day':
-                                    return {
-                                        weekday: 'short',
-                                        month: 'short',
-                                        day: 'numeric',
-                                        year: 'numeric',
-                                        hour: 'numeric',
-                                        hour12: true
-                                    };
-                                case 'week':
-                                    return {
-                                        weekday: 'short',
-                                        month: 'short',
-                                        day: 'numeric',
-                                        year: 'numeric'
-                                    };
-                                case 'month':
-                                    return {
-                                        weekday: 'short',
-                                        month: 'short',
-                                        day: 'numeric',
-                                        year: 'numeric'
-                                    };
-                                case 'year':
-                                    return {
-                                        month: 'long',
-                                        year: 'numeric'
-                                    };
-                                default:
-                                    return {
-                                        year: 'numeric',
-                                        month: 'short',
-                                        day: 'numeric',
-                                        hour: 'numeric',
-                                        minute: '2-digit',
-                                        hour12: true
-                                    };
-                            }
-                        })())}</td>
+                    tableHTML += `
+                        <tr>
+                            <td class="pool-color">${poolTemp}</td>
+                            <td class="outside-color">${outsideTemp}</td>
+                            <td class="text-muted">${formattedDate}</td>
+                        </tr>
                     `;
                 });
+
+                tableBody.innerHTML = tableHTML;
+
             } catch (error) {
                 console.error('Error loading readings table:', error);
             }
@@ -684,6 +778,8 @@
 
         // Initialize the app
         document.addEventListener('DOMContentLoaded', function() {
+            // Initialize current date range
+            initializeDateRange();
             loadData();
 
             // Set up event listeners
@@ -694,76 +790,110 @@
                     this.classList.add('active');
 
                     currentPeriod = this.dataset.period;
-                    currentOffset = 0; // Reset to current when changing period
+                    initializeDateRange(); // Reset to current period
                     loadData();
                 });
             });
 
             document.getElementById('prevBtn').addEventListener('click', function() {
-                currentOffset--;
+                navigateToPrevious();
                 loadData();
             });
 
             document.getElementById('nextBtn').addEventListener('click', function() {
                 // Don't allow navigating into the future
-                if (currentOffset < 0) {
-                    currentOffset++;
+                if (!isCurrentPeriod()) {
+                    navigateToNext();
                     loadData();
                 }
             });
 
             // Auto-refresh every 30 seconds (only for current period)
             setInterval(() => {
-                if (currentOffset === 0) loadData();
+                if (isCurrentPeriod()) loadData();
             }, 30000);
         });
 
         function getPeriodLabel() {
             const now = new Date();
-            let targetDate = new Date(now);
+            const isCurrentRange = isCurrentPeriod();
 
             switch (currentPeriod) {
                 case 'hourly':
-                    targetDate.setHours(now.getHours() + currentOffset);
-                    const hourName = targetDate.toLocaleString('en-US', {
+                    const hourLabel = currentStartDate.toLocaleString('en-US', {
                         weekday: 'long',
                         month: 'long',
                         day: 'numeric',
                         hour: 'numeric',
                         hour12: true
                     });
-
-                    if (currentOffset === 0) return `${hourName} (now)`;
-                    return hourName;
+                    return isCurrentRange ? `${hourLabel} (now)` : hourLabel;
 
                 case 'day':
-                    targetDate.setDate(now.getDate() + currentOffset);
-                    const dayName = targetDate.toLocaleDateString('en-US', { weekday: 'long' });
-                    const monthDay = targetDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
+                    const dayName = currentStartDate.toLocaleDateString('en-US', { weekday: 'long' });
+                    const monthDay = currentStartDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
 
-                    if (currentOffset === 0) return `${dayName} ${monthDay} (today)`;
-                    if (currentOffset === -1) return `${dayName} ${monthDay} (yesterday)`;
+                    if (isCurrentRange) return `${dayName} ${monthDay} (today)`;
+
+                    // Check if it's yesterday
+                    const yesterday = new Date(now);
+                    yesterday.setDate(yesterday.getDate() - 1);
+                    yesterday.setHours(0, 0, 0, 0);
+
+                    if (currentStartDate.getTime() === yesterday.getTime()) {
+                        return `${dayName} ${monthDay} (yesterday)`;
+                    }
+
                     return `${dayName} ${monthDay}`;
 
                 case 'week':
-                    targetDate.setDate(now.getDate() + (currentOffset * 7));
-                    const weekText = `Week of ${targetDate.toLocaleDateString()}`;
-                    if (currentOffset === 0) return `${weekText} (this week)`;
-                    if (currentOffset === -1) return `${weekText} (last week)`;
+                    const weekStartDate = currentStartDate.toLocaleDateString('en-US', {
+                        month: 'long',
+                        day: 'numeric'
+                    });
+                    const weekEndDate = new Date(currentEndDate.getTime() - 1); // End date minus 1 day to get last day of week
+                    const weekEndFormatted = weekEndDate.toLocaleDateString('en-US', {
+                        day: 'numeric'
+                    });
+                    const yearFormatted = weekEndDate.toLocaleDateString('en-US', {
+                        year: 'numeric'
+                    });
+                    const weekText = `${weekStartDate}-${weekEndFormatted}, ${yearFormatted}`;
+
+                    if (isCurrentRange) return `${weekText} (this week)`;
+
+                    // Check if it's last week
+                    const lastWeekStart = new Date(now);
+                    lastWeekStart.setDate(lastWeekStart.getDate() - lastWeekStart.getDay() - 7);
+                    lastWeekStart.setHours(0, 0, 0, 0);
+
+                    if (currentStartDate.getTime() === lastWeekStart.getTime()) {
+                        return `${weekText} (last week)`;
+                    }
+
                     return weekText;
 
                 case 'month':
-                    targetDate.setMonth(now.getMonth() + currentOffset);
-                    const monthText = targetDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-                    if (currentOffset === 0) return `${monthText} (this month)`;
-                    if (currentOffset === -1) return `${monthText} (last month)`;
+                    const monthText = currentStartDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+                    if (isCurrentRange) return `${monthText} (this month)`;
+
+                    // Check if it's last month
+                    const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+
+                    if (currentStartDate.getTime() === lastMonth.getTime()) {
+                        return `${monthText} (last month)`;
+                    }
+
                     return monthText;
 
                 case 'year':
-                    targetDate.setFullYear(now.getFullYear() + currentOffset);
-                    const yearText = targetDate.getFullYear().toString();
-                    if (currentOffset === 0) return `${yearText} (this year)`;
-                    if (currentOffset === -1) return `${yearText} (last year)`;
+                    const yearText = currentStartDate.getFullYear().toString();
+                    if (isCurrentRange) return `${yearText} (this year)`;
+
+                    if (currentStartDate.getFullYear() === now.getFullYear() - 1) {
+                        return `${yearText} (last year)`;
+                    }
+
                     return yearText;
 
                 default:
@@ -773,14 +903,15 @@
 
         function updateNavigationButtons() {
             const nextBtn = document.getElementById('nextBtn');
-            // Disable next button if we're at the current period (offset = 0)
-            nextBtn.disabled = (currentOffset >= 0);
+            // Disable next button if we're viewing the current period
+            nextBtn.disabled = isCurrentPeriod();
         }
 
         async function loadData() {
             document.getElementById('currentPeriod').textContent = getPeriodLabel();
 
-            const periodParam = `?period=${currentPeriod}&offset=${currentOffset}`;
+            const startDateParam = currentStartDate.toISOString();
+            const endDateParam = currentEndDate.toISOString();
 
             try {
                 // Load latest temperatures for both locations (always current)
@@ -805,10 +936,10 @@
                 }
 
                 // Load statistics for selected period (lower priority, load after chart)
-                const poolStatsResponse = await fetch(`/api/temperatures/stats${periodParam}&location=pool`);
+                const poolStatsResponse = await fetch(`/api/temperatures/stats?startDate=${startDateParam}&endDate=${endDateParam}&location=pool`);
                 const poolStats = await poolStatsResponse.json();
 
-                const outsideStatsResponse = await fetch(`/api/temperatures/stats${periodParam}&location=outside`);
+                const outsideStatsResponse = await fetch(`/api/temperatures/stats?startDate=${startDateParam}&endDate=${endDateParam}&location=outside`);
                 const outsideStats = await outsideStatsResponse.json();
 
                 document.getElementById('poolAvgTemp').textContent = poolStats.avg_temp ? poolStats.avg_temp.toFixed(1) + '°F' : '--';
@@ -834,8 +965,10 @@
                 temperatureChart.destroy();
             }
 
-            // Fetch aggregated data for the selected period and offset
-            const response = await fetch(`/api/temperatures?period=${currentPeriod}&offset=${currentOffset}`);
+            // Fetch aggregated data for the selected date range
+            const startDateParam = currentStartDate.toISOString();
+            const endDateParam = currentEndDate.toISOString();
+            const response = await fetch(`/api/temperatures?period=${currentPeriod}&startDate=${startDateParam}&endDate=${endDateParam}`);
             const data = await response.json();
 
             // Separate data by location

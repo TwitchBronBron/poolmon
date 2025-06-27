@@ -3,6 +3,31 @@ import sqlite3 from 'sqlite3';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
+// Pool Temperature Monitoring API
+//
+// Main API Endpoints:
+// - GET /api/temperatures?period={period}&startDate={ISO}&endDate={ISO}[&location={location}]
+//   Returns temperature readings for the specified date range and period
+//   Parameters:
+//     - period: 'hourly', 'day', 'week', 'month', or 'year' (determines aggregation level)
+//     - startDate: ISO 8601 date string (YYYY-MM-DDTHH:mm:ss.sssZ)
+//     - endDate: ISO 8601 date string (YYYY-MM-DDTHH:mm:ss.sssZ)
+//     - location: optional filter by 'pool' or 'outside'
+//
+// - GET /api/temperatures/stats?startDate={ISO}&endDate={ISO}[&location={location}]
+//   Returns statistics (avg, min, max) for the specified date range
+//   Parameters:
+//     - startDate: ISO 8601 date string
+//     - endDate: ISO 8601 date string
+//     - location: optional filter by 'pool' or 'outside'
+//
+// - GET /api/temperatures/latest[?location={location}]
+//   Returns the most recent temperature reading
+//
+// - POST /api/temperatures
+//   Add a new temperature reading
+//   Body: { temperature: number, location?: string }
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -227,71 +252,40 @@ app.use(express.static(path.join(__dirname, 'public')));
 // API Routes
 app.get('/api/temperatures', (req, res) => {
     const period = req.query.period || 'day'; // hourly, day, week, month, year
-    const offset = parseInt(req.query.offset as string) || 0; // -1 = previous, 0 = current, 1 = next
+    const startDate = req.query.startDate as string;
+    const endDate = req.query.endDate as string;
     const location = req.query.location;
+
+    // Validate required parameters
+    if (!startDate || !endDate) {
+        res.status(400).json({ error: 'startDate and endDate parameters are required' });
+        return;
+    }
+
+    // Validate date format
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+        res.status(400).json({ error: 'Invalid date format. Use ISO 8601 format (YYYY-MM-DDTHH:mm:ss.sssZ)' });
+        return;
+    }
 
     let query = '';
     let groupBy = '';
     let dateFormat = '';
 
-    // Calculate date ranges based on period and offset
-    const getDateRange = (period: string, offset: number) => {
-        switch (period) {
-            case 'hourly':
-                return {
-                    start: `datetime('now', '${offset - 1} hour')`,
-                    end: `datetime('now', '${offset} hour')`
-                };
-            case 'day':
-                return {
-                    start: `datetime('now', '${offset - 1} day')`,
-                    end: `datetime('now', '${offset} day')`
-                };
-            case 'week':
-                const weekOffset = offset * 7;
-                return {
-                    start: `datetime('now', '${weekOffset - 7} day')`,
-                    end: `datetime('now', '${weekOffset} day')`
-                };
-            case 'month':
-                return {
-                    start: `datetime('now', 'start of month', '${offset} month')`,
-                    end: `datetime('now', 'start of month', '${offset + 1} month')`
-                };
-            case 'year':
-                return {
-                    start: `datetime('now', 'start of year', '${offset} year')`,
-                    end: `datetime('now', 'start of year', '${offset + 1} year')`
-                };
-            default:
-                return {
-                    start: `datetime('now', '-1 day')`,
-                    end: `datetime('now')`
-                };
-        }
-    };
-
-    const dateRange = getDateRange(period as string, offset);
-
     // Determine grouping and date format based on period
     switch (period) {
         case 'hourly':
             // Return raw data for hourly view (no aggregation)
-            const startTime = new Date();
-            startTime.setHours(startTime.getHours() + offset - 1);
-            startTime.setMinutes(0, 0, 0);
-
-            const endTime = new Date();
-            endTime.setHours(endTime.getHours() + offset);
-            endTime.setMinutes(0, 0, 0);
-
             let rawQuery = `
                 SELECT temperature, location, timestamp, 1 as reading_count
                 FROM temperature_readings
                 WHERE timestamp >= ? AND timestamp < ?
             `;
 
-            const queryParams = [startTime.toISOString(), endTime.toISOString()];
+            const queryParams = [startDate, endDate];
 
             if (location) {
                 rawQuery += ` AND location = ?`;
@@ -313,33 +307,33 @@ app.get('/api/temperatures', (req, res) => {
             // Group by hour for daily view
             dateFormat = "strftime('%Y-%m-%d %H:00:00', timestamp)";
             groupBy = "strftime('%Y-%m-%d %H', timestamp)";
-            query += `WHERE timestamp >= ${dateRange.start} AND timestamp < ${dateRange.end} `;
+            query = `WHERE timestamp >= ? AND timestamp < ? `;
             break;
         case 'week':
             // Group by day for weekly view
             dateFormat = "strftime('%Y-%m-%d', timestamp)";
             groupBy = "strftime('%Y-%m-%d', timestamp)";
-            query += `WHERE timestamp >= ${dateRange.start} AND timestamp < ${dateRange.end} `;
+            query = `WHERE timestamp >= ? AND timestamp < ? `;
             break;
         case 'month':
             // Group by day for monthly view
             dateFormat = "strftime('%Y-%m-%d', timestamp)";
             groupBy = "strftime('%Y-%m-%d', timestamp)";
-            query += `WHERE timestamp >= ${dateRange.start} AND timestamp < ${dateRange.end} `;
+            query = `WHERE timestamp >= ? AND timestamp < ? `;
             break;
         case 'year':
             // Group by month for yearly view
             dateFormat = "strftime('%Y-%m-01', timestamp)";
             groupBy = "strftime('%Y-%m', timestamp)";
-            query += `WHERE timestamp >= ${dateRange.start} AND timestamp < ${dateRange.end} `;
+            query = `WHERE timestamp >= ? AND timestamp < ? `;
             break;
         default:
             dateFormat = "strftime('%Y-%m-%d %H:00:00', timestamp)";
             groupBy = "strftime('%Y-%m-%d %H', timestamp)";
-            query += `WHERE timestamp >= ${dateRange.start} AND timestamp < ${dateRange.end} `;
+            query = `WHERE timestamp >= ? AND timestamp < ? `;
     }
 
-    const baseQuery = `
+    let baseQuery = `
         SELECT
             ${dateFormat} as timestamp,
             location,
@@ -347,11 +341,21 @@ app.get('/api/temperatures', (req, res) => {
             COUNT(*) as reading_count
         FROM temperature_readings
         ${query}
+    `;
+
+    const params = [startDate, endDate];
+
+    if (location) {
+        baseQuery += ` AND location = ?`;
+        params.push(location as string);
+    }
+
+    baseQuery += `
         GROUP BY ${groupBy}, location
         ORDER BY timestamp ASC
     `;
 
-    db.all(baseQuery, [], (err, rows) => {
+    db.all(baseQuery, params, (err, rows) => {
         if (err) {
             res.status(500).json({ error: err.message });
             return;
@@ -394,61 +398,27 @@ app.get('/api/temperatures/latest', (req, res) => {
 });
 
 app.get('/api/temperatures/stats', (req, res) => {
-    const period = req.query.period || 'day';
-    const offset = parseInt(req.query.offset as string) || 0;
+    const startDate = req.query.startDate as string;
+    const endDate = req.query.endDate as string;
     const location = req.query.location;
 
-    let whereClause = '';
-    let params: any[] = [];
-
-    if (period === 'hourly') {
-        // Use JavaScript date calculation for hourly (consistent with main endpoint)
-        const startTime = new Date();
-        startTime.setHours(startTime.getHours() + offset - 1);
-        startTime.setMinutes(0, 0, 0);
-
-        const endTime = new Date();
-        endTime.setHours(endTime.getHours() + offset);
-        endTime.setMinutes(0, 0, 0);
-
-        whereClause = `WHERE timestamp >= ? AND timestamp < ?`;
-        params = [startTime.toISOString(), endTime.toISOString()];
-    } else {
-        // Use SQLite date functions for other periods
-        const getDateRange = (period: string, offset: number) => {
-            switch (period) {
-                case 'day':
-                    return {
-                        start: `datetime('now', '${offset - 1} day')`,
-                        end: `datetime('now', '${offset} day')`
-                    };
-                case 'week':
-                    const weekOffset = offset * 7;
-                    return {
-                        start: `datetime('now', '${weekOffset - 7} day')`,
-                        end: `datetime('now', '${weekOffset} day')`
-                    };
-                case 'month':
-                    return {
-                        start: `datetime('now', 'start of month', '${offset} month')`,
-                        end: `datetime('now', 'start of month', '${offset + 1} month')`
-                    };
-                case 'year':
-                    return {
-                        start: `datetime('now', 'start of year', '${offset} year')`,
-                        end: `datetime('now', 'start of year', '${offset + 1} year')`
-                    };
-                default:
-                    return {
-                        start: `datetime('now', '-1 day')`,
-                        end: `datetime('now')`
-                    };
-            }
-        };
-
-        const dateRange = getDateRange(period as string, offset);
-        whereClause = `WHERE timestamp >= ${dateRange.start} AND timestamp < ${dateRange.end}`;
+    // Validate required parameters
+    if (!startDate || !endDate) {
+        res.status(400).json({ error: 'startDate and endDate parameters are required' });
+        return;
     }
+
+    // Validate date format
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+        res.status(400).json({ error: 'Invalid date format. Use ISO 8601 format (YYYY-MM-DDTHH:mm:ss.sssZ)' });
+        return;
+    }
+
+    let whereClause = 'WHERE timestamp >= ? AND timestamp < ?';
+    let params = [startDate, endDate];
 
     // Add location filter if specified
     if (location) {
