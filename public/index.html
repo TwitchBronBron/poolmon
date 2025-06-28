@@ -228,7 +228,6 @@
         }
 
         .readings-content {
-            overflow: hidden;
             transition: max-height 0.3s ease, opacity 0.3s ease;
         }
 
@@ -238,7 +237,6 @@
         }
 
         .readings-content.expanded {
-            max-height: 1000px;
             opacity: 1;
         }
 
@@ -311,7 +309,7 @@
         }
 
         .text-muted {
-            color: #ccc;
+            color: #666;
         }
 
         .text-gray {
@@ -761,7 +759,7 @@
                     const outsideTemp = reading.outside !== null ? `${reading.outside.toFixed(1)}°F` : '--';
 
                     tableHTML += `
-                        <tr>
+                        <tr class="clickable-row" onclick="drillDownFromReading('${reading.timestamp}')">
                             <td class="pool-color">${poolTemp}</td>
                             <td class="outside-color">${outsideTemp}</td>
                             <td class="text-muted">${formattedDate}</td>
@@ -774,6 +772,44 @@
             } catch (error) {
                 console.error('Error loading readings table:', error);
             }
+        }
+
+        // Drill down to more detailed view when clicking on a reading
+        function drillDownFromReading(timestamp) {
+            const readingDate = new Date(timestamp);
+            const now = new Date();
+
+            if (currentPeriod === 'year') {
+                // Year -> Month: Navigate to the specific month
+                currentPeriod = 'month';
+                const monthStart = new Date(readingDate.getFullYear(), readingDate.getMonth(), 1);
+                const monthEnd = new Date(readingDate.getFullYear(), readingDate.getMonth() + 1, 1);
+                currentStartDate = monthStart;
+                currentEndDate = monthEnd;
+            } else if (currentPeriod === 'month' || currentPeriod === 'week') {
+                // Month/Week -> Day: Navigate to the specific day
+                currentPeriod = 'day';
+                const dayStart = new Date(readingDate.getFullYear(), readingDate.getMonth(), readingDate.getDate());
+                const dayEnd = new Date(dayStart);
+                dayEnd.setDate(dayEnd.getDate() + 1);
+                currentStartDate = dayStart;
+                currentEndDate = dayEnd;
+            } else if (currentPeriod === 'day') {
+                // Day -> Hourly: Navigate to the specific hour
+                currentPeriod = 'hourly';
+                const hourStart = new Date(readingDate.getFullYear(), readingDate.getMonth(), readingDate.getDate(), readingDate.getHours());
+                const hourEnd = new Date(hourStart);
+                hourEnd.setHours(hourEnd.getHours() + 1);
+                currentStartDate = hourStart;
+                currentEndDate = hourEnd;
+            }
+
+            // Update active button
+            document.querySelectorAll('.period-btn').forEach(btn => btn.classList.remove('active'));
+            const activeBtn = document.querySelector(`[data-period="${currentPeriod}"]`);
+            if (activeBtn) activeBtn.classList.add('active');
+
+            loadData();
         }
 
         // Initialize the app
