@@ -5,7 +5,7 @@ import { fileURLToPath } from 'url';
 import cron from 'node-cron';
 
 //a secret key defined as an ENV variable to ensure only our own app can post data
-const POOLTEMP_API_KEY = process.env.POOLTEMP_API_KEY;
+const POOLMON_API_KEY = process.env.POOLMON_API_KEY;
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -779,7 +779,7 @@ app.post('/api/temperature', async (req, res) => {
     const { temperature, deviceId, timestamp } = req.body;
     const apiKey = req.headers['x-api-key'];
 
-    if (apiKey !== POOLTEMP_API_KEY) {
+    if (apiKey !== POOLMON_API_KEY) {
         res.status(401).json({ error: 'Client provided invalid api key' });
         return;
     }

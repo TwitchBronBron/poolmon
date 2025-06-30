@@ -15,7 +15,7 @@ for device in /sys/bus/w1/devices/28*; do
             temp_fahrenheit=$(printf "%d.%02d" $temp_f_calc $temp_f_remainder)
 
             echo "$(date '+%H:%M:%S') - $device_id - ${temp_fahrenheit}°F"
-            curl -X POST "$API_URL" -H "Content-Type: application/json" -H "X-API-Key: $POST_KEY" -d "{\"deviceId\":\"$device_id\",\"temperature\":$temp_fahrenheit,\"timestamp\":\"$timestamp\"}"
+            curl -X POST "$API_URL" -H "Content-Type: application/json" -H "X-API-Key: $POOLMON_API_KEY" -d "{\"deviceId\":\"$device_id\",\"temperature\":$temp_fahrenheit,\"timestamp\":\"$timestamp\"}"
         fi
     fi
 done
