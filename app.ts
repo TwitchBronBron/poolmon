@@ -3,6 +3,8 @@ import sqlite3 from 'sqlite3';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import cron from 'node-cron';
+import cors from 'cors';
+import fs from 'fs';
 
 //a secret key defined as an ENV variable to ensure only our own app can post data
 const POOLMON_API_KEY = process.env.POOLMON_API_KEY;
@@ -489,7 +491,41 @@ function insertTemperatureReading(temperature: number, deviceId: string, timesta
 }
 
 // Middleware
+app.use(cors({
+    origin: true, // Allow all origins
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-API-Key']
+}));
 app.use(express.json());
+
+// Custom middleware to handle index.html with dynamic base href
+app.use(async (req, res, next) => {
+    if (req.path === '/' || req.path === '/index.html') {
+        try {
+            const indexPath = path.join(__dirname, 'public', 'index.html');
+            const protocol = req.secure || req.get('x-forwarded-proto') === 'https' ? 'https' : 'http';
+            const host = req.get('host');
+            const baseUrl = `${protocol}://${host}`;
+
+            const data = await fs.promises.readFile(indexPath, 'utf8');
+
+            // Replace the base href with the dynamic URL
+            const modifiedHtml = data.replace(
+                /<base href="[^"]*"\s*\/?>/i,
+                `<base href="${baseUrl}/" />`
+            );
+
+            res.type('html').send(modifiedHtml);
+        } catch (err) {
+            res.status(500).send('Error loading page');
+        }
+    } else {
+        next();
+    }
+});
+
+// Serve other static files normally
 app.use(express.static(path.join(__dirname, 'public')));
 
 // API Routes
