@@ -286,6 +286,10 @@ app.use(cors({
     methods: '*', // Allow all methods
     allowedHeaders: '*' // Allow all headers
 }));
+
+// Trust proxy headers from nginx
+app.set('trust proxy', true);
+
 app.use(express.json());
 
 // Custom middleware to handle index.html with dynamic base href
@@ -293,8 +297,13 @@ app.use(async (req, res, next) => {
     if (req.path === '/' || req.path === '/index.html') {
         try {
             const indexPath = path.join(__dirname, 'public', 'index.html');
-            const protocol = req.secure || req.get('x-forwarded-proto') === 'https' ? 'https' : 'http';
-            const host = req.get('host');
+
+            // Get the correct protocol from proxy headers
+            const protocol = req.get('x-forwarded-proto') || (req.secure ? 'https' : 'http');
+
+            // Get the correct host from proxy headers (external host, not internal)
+            const host = req.get('x-forwarded-host') || req.get('host');
+
             const baseUrl = `${protocol}://${host}`;
 
             const data = await fs.promises.readFile(indexPath, 'utf8');
