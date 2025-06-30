@@ -4,33 +4,10 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import cron from 'node-cron';
 
-// Pool Temperature Monitoring API
-//
-// Main API Endpoints:
-// - GET /api/temperatures?period={period}&startDate={ISO}&endDate={ISO}[&location={location}]
-//   Returns temperature readings for the specified date range and period
-//   Parameters:
-//     - period: 'hourly', 'day', 'week', 'month', or 'year' (determines aggregation level)
-//     - startDate: ISO 8601 date string (YYYY-MM-DDTHH:mm:ss.sssZ)
-//     - endDate: ISO 8601 date string (YYYY-MM-DDTHH:mm:ss.sssZ)
-//     - location: optional filter by 'pool' or 'outside'
-//
-// - GET /api/temperatures/stats?startDate={ISO}&endDate={ISO}[&location={location}]
-//   Returns statistics (avg, min, max) for the specified date range
-//   Parameters:
-//     - startDate: ISO 8601 date string
-//     - endDate: ISO 8601 date string
-//     - location: optional filter by 'pool' or 'outside'
-//
-// - GET /api/temperatures/latest[?location={location}]
-//   Returns the most recent temperature reading
-//
-// - POST /api/sensors/reading
-//   Add a new temperature reading from a one-wire sensor
-//   Body: { temperature: number, deviceId: string, timestamp?: string }
-
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+const GENERATE_DUMMY_DATA = false;
 
 // Hardcoded sensor mappings for your specific one-wire devices
 const SENSOR_LOCATIONS = {
@@ -102,50 +79,43 @@ db.serialize(() => {
         });
     }, 5000); // Run after initial data load
 
-    // Initialize data and set up scheduled updates
-    db.get("SELECT COUNT(*) as count FROM temperature_readings", async (err, row: any) => {
-        if (row.count === 0) {
-            console.log('No existing data found. Generating dummy temperature data for the past month...');
-            const startTime = Date.now();
+    if (GENERATE_DUMMY_DATA) {
+        // Initialize data and set up scheduled updates
+        db.get("SELECT COUNT(*) as count FROM temperature_readings", async (err, row: any) => {
+            if (row.count === 0) {
+                console.log('No existing data found. Generating dummy temperature data for the past month...');
+                const startTime = Date.now();
 
-            // Generate 1 month of data with real device IDs
-            const dummyData = generateDummyData({
-                monthsAgo: 1,
-                intervalMinutes: 1
-            });
+                // Generate 1 month of data with real device IDs
+                const dummyData = generateDummyData({
+                    monthsAgo: 1,
+                    intervalMinutes: 1
+                });
 
-            const generationTime = Date.now() - startTime;
-            console.log(`Data generation took ${(generationTime / 1000).toFixed(2)} seconds`);
+                const generationTime = Date.now() - startTime;
+                console.log(`Data generation took ${(generationTime / 1000).toFixed(2)} seconds`);
 
-            console.log('Starting database insertion...');
-            const insertStartTime = Date.now();
+                console.log('Starting database insertion...');
+                const insertStartTime = Date.now();
 
-            try {
-                await insertDataBatch(dummyData);
+                try {
+                    await insertDataBatch(dummyData);
 
-                const insertionTime = Date.now() - insertStartTime;
-                const totalTime = Date.now() - startTime;
+                    const insertionTime = Date.now() - insertStartTime;
+                    const totalTime = Date.now() - startTime;
 
-                console.log(`Database insertion took ${(insertionTime / 1000).toFixed(2)} seconds`);
-                console.log(`Total time: ${(totalTime / 1000).toFixed(2)} seconds`);
-                console.log(`Successfully inserted ${dummyData.length.toLocaleString()} temperature readings`);
-                console.log(`Average insertion rate: ${Math.round(dummyData.length / (insertionTime / 1000)).toLocaleString()} records/second`);
-
-                // Set up the scheduled task after initial data is loaded
-                setupScheduledDataGeneration();
-            } catch (error) {
-                console.error('Error during initial data insertion:', error);
+                    console.log(`Database insertion took ${(insertionTime / 1000).toFixed(2)} seconds`);
+                    console.log(`Total time: ${(totalTime / 1000).toFixed(2)} seconds`);
+                    console.log(`Successfully inserted ${dummyData.length.toLocaleString()} temperature readings`);
+                    console.log(`Average insertion rate: ${Math.round(dummyData.length / (insertionTime / 1000)).toLocaleString()} records/second`);
+                } catch (error) {
+                    console.error('Error during initial data insertion:', error);
+                }
+            } else {
+                console.log(`Database already contains ${row.count.toLocaleString()} temperature readings`);
             }
-        } else {
-            console.log(`Database already contains ${row.count.toLocaleString()} temperature readings`);
-
-            // Backfill any missing data since last run
-            await backfillMissingData();
-
-            // Set up the scheduled task
-            setupScheduledDataGeneration();
-        }
-    });
+        });
+    }
 });
 
 // Function to generate realistic dummy data
@@ -227,13 +197,13 @@ function generateDummyData(options: {
         // Add both readings with the same timestamp
         data.push({
             temp: Math.round(poolTemp * 10) / 10, // Round to 1 decimal
-            deviceId: '28-012054745c8c',
+            deviceId: getDeviceIdsForLocation('pool')[0],
             timestamp: timestamp
         });
 
         data.push({
             temp: Math.round(outsideTemp * 10) / 10, // Round to 1 decimal
-            deviceId: '28-012054899557',
+            deviceId: getDeviceIdsForLocation('outside')[0],
             timestamp: timestamp
         });
 
@@ -390,13 +360,13 @@ async function generateDummyDataForRange(startDate: Date, endDate: Date, interva
         // Add both readings
         data.push({
             temp: Math.round(poolTemp * 10) / 10,
-            deviceId: '28-012054745c8c',
+            deviceId: getDeviceIdsForLocation('pool')[0],
             timestamp: timestamp
         });
 
         data.push({
             temp: Math.round(outsideTemp * 10) / 10,
-            deviceId: '28-012054899557',
+            deviceId: getDeviceIdsForLocation('outside')[0],
             timestamp: timestamp
         });
     }
@@ -498,16 +468,8 @@ function setupScheduledDataGeneration() {
 }
 
 // Function to insert temperature reading with device ID
-function insertTemperatureReading(temperature: number, deviceId: string, timestamp?: string): Promise<{ id: number, location: string; timestamp: string }> {
+function insertTemperatureReading(temperature: number, deviceId: string, timestamp?: string): Promise<{ id: number, timestamp: string }> {
     return new Promise((resolve, reject) => {
-        // Get the location from our hardcoded mappings
-        const location = getLocationFromDeviceId(deviceId);
-
-        if (!location) {
-            reject(new Error(`Unknown device ID: ${deviceId}. Valid device IDs are: ${Object.keys(SENSOR_LOCATIONS).join(', ')}`));
-            return;
-        }
-
         // Use provided timestamp or current time
         const actualTimestamp = timestamp || new Date().toISOString();
 
@@ -519,7 +481,7 @@ function insertTemperatureReading(temperature: number, deviceId: string, timesta
                     reject(err);
                     return;
                 }
-                resolve({ id: this.lastID, location, timestamp: actualTimestamp });
+                resolve({ id: this.lastID, timestamp: actualTimestamp });
             }
         );
     });
@@ -837,7 +799,6 @@ app.post('/api/temperature', async (req, res) => {
             id: result.id,
             temperature,
             deviceId,
-            location: result.location,
             timestamp: result.timestamp
         });
     } catch (error) {
@@ -849,18 +810,4 @@ app.post('/api/temperature', async (req, res) => {
 // Start the server
 app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
-});
-
-// Schedule tasks
-cron.schedule('* * * * *', async () => {
-    // Every minute
-    try {
-        // Generate and insert the latest data point
-        await generateLatestDataPoint();
-
-        // Backfill missing data if needed
-        await backfillMissingData();
-    } catch (error) {
-        console.error('Error in scheduled task:', error);
-    }
 });
