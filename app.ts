@@ -2,7 +2,6 @@ import express from 'express';
 import sqlite3 from 'sqlite3';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import cron from 'node-cron';
 import cors from 'cors';
 import fs from 'fs';
 
@@ -222,161 +221,6 @@ function generateDummyData(options: {
     return data;
 }
 
-// Function to get the latest timestamp from the database
-function getLatestTimestamp(): Promise<Date | null> {
-    return new Promise((resolve, reject) => {
-        db.get(
-            'SELECT MAX(timestamp) as latest FROM temperature_readings',
-            (err, row: any) => {
-                if (err) {
-                    reject(err);
-                    return;
-                }
-                if (row && row.latest) {
-                    resolve(new Date(row.latest));
-                } else {
-                    resolve(null);
-                }
-            }
-        );
-    });
-}
-
-// Function to backfill missing data since the last timestamp
-async function backfillMissingData() {
-    try {
-        const latestTimestamp = await getLatestTimestamp();
-
-        if (!latestTimestamp) {
-            console.log('No existing data found, initial population will be handled by main initialization');
-            return;
-        }
-
-        const now = new Date();
-        const timeDiff = now.getTime() - latestTimestamp.getTime();
-        const minutesDiff = Math.floor(timeDiff / (60 * 1000));
-
-        if (minutesDiff <= 1) {
-            console.log('Data is up to date, no backfill needed');
-            return;
-        }
-
-        console.log(`Backfilling ${minutesDiff} minutes of missing data since ${latestTimestamp.toISOString()}`);
-
-        // Generate data from the last timestamp to now
-        const startDate = new Date(latestTimestamp.getTime() + 60 * 1000); // Start from 1 minute after last timestamp
-        const endDate = now;
-
-        const backfillData = await generateDummyDataForRange(startDate, endDate, 1); // 1-minute intervals
-
-        if (backfillData.length === 0) {
-            console.log('No data to backfill');
-            return;
-        }
-
-        // Insert the backfilled data
-        await insertDataBatch(backfillData);
-        console.log(`Successfully backfilled ${backfillData.length} temperature readings`);
-
-    } catch (error) {
-        console.error('Error during backfill:', error);
-    }
-}
-
-// Function to get the last known temperatures for both locations
-function getLastKnownTemperatures(): Promise<{ pool: number, outside: number }> {
-    return new Promise((resolve, reject) => {
-        const query = `
-            SELECT device_id, temperature
-            FROM temperature_readings
-            WHERE timestamp = (SELECT MAX(timestamp) FROM temperature_readings)
-        `;
-
-        db.all(query, (err, rows: any[]) => {
-            if (err) {
-                reject(err);
-                return;
-            }
-
-            let poolTemp = 80; // fallback
-            let outsideTemp = 72; // fallback
-
-            if (rows && rows.length > 0) {
-                rows.forEach(row => {
-                    const location = getLocationFromDeviceId(row.device_id);
-                    if (location === 'pool') {
-                        poolTemp = row.temperature;
-                    } else if (location === 'outside') {
-                        outsideTemp = row.temperature;
-                    }
-                });
-            }
-
-            resolve({ pool: poolTemp, outside: outsideTemp });
-        });
-    });
-}
-
-// Function to generate dummy data for a specific date range
-async function generateDummyDataForRange(startDate: Date, endDate: Date, intervalMinutes: number) {
-    const intervalMs = intervalMinutes * 60 * 1000;
-    const data = [];
-
-    // Get the last known temperatures to continue from where we left off
-    const lastTemps = await getLastKnownTemperatures();
-    let previousOutsideTemp = lastTemps.outside;
-    let weatherPattern = Math.random();
-
-    for (let time = new Date(startDate); time <= endDate; time = new Date(time.getTime() + intervalMs)) {
-        const timestamp = time.toISOString();
-        const dayOfYear = Math.floor((time.getTime() - new Date(time.getFullYear(), 0, 0).getTime()) / (24 * 60 * 60 * 1000));
-
-        // Generate realistic outside temperature (same algorithm as main function)
-        const baseOutsideTemp = 72;
-        const seasonalVariation = Math.sin((dayOfYear / 365) * Math.PI * 2) * 25;
-        const hourOfDay = time.getHours() + time.getMinutes() / 60;
-        const dailyCycle = Math.sin((hourOfDay - 6) / 24 * Math.PI * 2) * 15;
-        const dayVariation = Math.sin((dayOfYear * 7) / 365 * Math.PI * 2) * 8;
-
-        weatherPattern += (Math.random() - 0.5) * 0.1;
-        weatherPattern = Math.max(-1, Math.min(1, weatherPattern));
-        const weatherEffect = weatherPattern * 12;
-        const hourlyNoise = (Math.random() - 0.5) * 3;
-
-        const targetOutsideTemp = baseOutsideTemp + seasonalVariation + dailyCycle + dayVariation + weatherEffect + hourlyNoise;
-
-        const maxChange = 2;
-        const tempDiff = targetOutsideTemp - previousOutsideTemp;
-        const actualChange = Math.max(-maxChange, Math.min(maxChange, tempDiff));
-        const outsideTemp = previousOutsideTemp + actualChange;
-        previousOutsideTemp = outsideTemp;
-
-        // Generate pool temperature
-        const basePoolTemp = 80;
-        const poolSeasonalVariation = seasonalVariation * 0.3;
-        const poolDailyVariation = dailyCycle * 0.2;
-        const outsideTempInfluence = (outsideTemp - baseOutsideTemp) * 0.1;
-        const poolHeatCycle = Math.sin((hourOfDay - 12) / 24 * Math.PI * 2) * 2;
-        const poolNoise = (Math.random() - 0.5) * 1.5;
-        const poolTemp = basePoolTemp + poolSeasonalVariation + poolDailyVariation + outsideTempInfluence + poolHeatCycle + poolNoise;
-
-        // Add both readings
-        data.push({
-            temp: Math.round(poolTemp * 10) / 10,
-            deviceId: getDeviceIdsForLocation('pool')[0],
-            timestamp: timestamp
-        });
-
-        data.push({
-            temp: Math.round(outsideTemp * 10) / 10,
-            deviceId: getDeviceIdsForLocation('outside')[0],
-            timestamp: timestamp
-        });
-    }
-
-    return data;
-}
-
 // Function to insert data in batches using transactions
 function insertDataBatch(data: any[]): Promise<void> {
     return new Promise((resolve, reject) => {
@@ -413,61 +257,6 @@ function insertDataBatch(data: any[]): Promise<void> {
             });
         });
     });
-}
-
-// Function to generate and insert the latest data point
-async function generateLatestDataPoint() {
-    try {
-        const now = new Date();
-        const oneMinuteAgo = new Date(now.getTime() - 60 * 1000);
-
-        // Check if we already have data for this minute
-        const existingData = await new Promise<any>((resolve, reject) => {
-            db.get(
-                'SELECT COUNT(*) as count FROM temperature_readings WHERE timestamp >= ? AND timestamp < ?',
-                [oneMinuteAgo.toISOString(), now.toISOString()],
-                (err, row) => {
-                    if (err) reject(err);
-                    else resolve(row);
-                }
-            );
-        });
-
-        if (existingData.count > 0) {
-            console.log('Data already exists for this minute, skipping...');
-            return;
-        }
-
-        // Generate fresh data for the current minute
-        const freshData = await generateDummyDataForRange(now, now, 1);
-
-        if (freshData.length > 0) {
-            await insertDataBatch(freshData);
-            console.log(`Generated fresh data point at ${now.toISOString()}`);
-        }
-
-    } catch (error) {
-        console.error('Error generating latest data point:', error);
-    }
-}
-
-// Function to set up the scheduled data generation
-function setupScheduledDataGeneration() {
-    console.log('Setting up scheduled data generation (every 1 minute)...');
-
-    // Schedule the task to run every minute
-    cron.schedule('* * * * *', async () => {
-        try {
-            await generateLatestDataPoint();
-        } catch (error) {
-            console.error('Error in scheduled data generation:', error);
-        }
-    }, {
-        scheduled: true,
-        timezone: "America/New_York" // Adjust timezone as needed
-    });
-
-    console.log('Scheduled data generation is now active');
 }
 
 // Function to insert temperature reading with device ID
@@ -774,7 +563,6 @@ app.get('/api/temperatures/raw', (req, res) => {
 
     // Parse the aggregated timestamp to determine the time range
     const targetDate = new Date(timestamp);
-    const currentPeriod = req.query.period || 'day'; // This should be passed from frontend
 
     let startTime: Date, endTime: Date;
 
