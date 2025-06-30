@@ -4,6 +4,9 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import cron from 'node-cron';
 
+//a secret key defined as an ENV variable to ensure only our own app can post data
+const POOLTEMP_API_KEY = process.env.POOLTEMP_API_KEY;
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -47,8 +50,6 @@ db.serialize(() => {
             device_id TEXT NOT NULL
         )
     `);
-
-
 
     // Create indexes for better query performance with large datasets
     db.run(`CREATE INDEX IF NOT EXISTS idx_timestamp ON temperature_readings(timestamp)`);
@@ -776,6 +777,12 @@ app.get('/api/temperatures/raw', (req, res) => {
 
 app.post('/api/temperature', async (req, res) => {
     const { temperature, deviceId, timestamp } = req.body;
+    const apiKey = req.headers['x-api-key'];
+
+    if (apiKey !== POOLTEMP_API_KEY) {
+        res.status(401).json({ error: 'Client provided invalid api key' });
+        return;
+    }
 
     if (!temperature || typeof temperature !== 'number') {
         res.status(400).json({ error: 'Temperature is required and must be a number' });
