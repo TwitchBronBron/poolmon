@@ -7,6 +7,7 @@ import fs from 'fs';
 
 //a secret key defined as an ENV variable to ensure only our own app can post data
 const POOLMON_API_KEY = process.env.POOLMON_API_KEY;
+const PORT = process.env.PORT || 3004;
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -35,7 +36,6 @@ function getAllLocations(): string[] {
 }
 
 const app = express();
-const PORT = process.env.PORT || 3000;
 
 // Database setup
 const db = new sqlite3.Database('pool_temperature.db');
