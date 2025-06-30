@@ -283,8 +283,8 @@ function insertTemperatureReading(temperature: number, deviceId: string, timesta
 app.use(cors({
     origin: true, // Allow all origins
     credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-API-Key']
+    methods: '*', // Allow all methods
+    allowedHeaders: '*' // Allow all headers
 }));
 app.use(express.json());
 
