@@ -394,32 +394,32 @@ app.get('/api/temperatures', (req, res) => {
 
         case 'day':
             // Group by hour for daily view
-            dateFormat = "strftime('%Y-%m-%d %H:00:00', timestamp)";
+            dateFormat = "strftime('%Y-%m-%dT%H:00:00.000Z', timestamp)";
             groupBy = "strftime('%Y-%m-%d %H', timestamp)";
-            query = `WHERE timestamp >= ? AND timestamp < ? `;
+            query = `WHERE timestamp >= ? AND timestamp <= ? `;
             break;
         case 'week':
             // Group by day for weekly view
-            dateFormat = "strftime('%Y-%m-%d', timestamp)";
+            dateFormat = "strftime('%Y-%m-%dT00:00:00.000Z', timestamp)";
             groupBy = "strftime('%Y-%m-%d', timestamp)";
-            query = `WHERE timestamp >= ? AND timestamp < ? `;
+            query = `WHERE timestamp >= ? AND timestamp <= ? `;
             break;
         case 'month':
             // Group by day for monthly view
-            dateFormat = "strftime('%Y-%m-%d', timestamp)";
+            dateFormat = "strftime('%Y-%m-%dT00:00:00.000Z', timestamp)";
             groupBy = "strftime('%Y-%m-%d', timestamp)";
-            query = `WHERE timestamp >= ? AND timestamp < ? `;
+            query = `WHERE timestamp >= ? AND timestamp <= ? `;
             break;
         case 'year':
             // Group by month for yearly view
-            dateFormat = "strftime('%Y-%m-01', timestamp)";
+            dateFormat = "strftime('%Y-%m-01T00:00:00.000Z', timestamp)";
             groupBy = "strftime('%Y-%m', timestamp)";
-            query = `WHERE timestamp >= ? AND timestamp < ? `;
+            query = `WHERE timestamp >= ? AND timestamp <= ? `;
             break;
         default:
-            dateFormat = "strftime('%Y-%m-%d %H:00:00', timestamp)";
+            dateFormat = "strftime('%Y-%m-%dT%H:00:00.000Z', timestamp)";
             groupBy = "strftime('%Y-%m-%d %H', timestamp)";
-            query = `WHERE timestamp >= ? AND timestamp < ? `;
+            query = `WHERE timestamp >= ? AND timestamp <= ? `;
     }
 
     let baseQuery = `
@@ -430,9 +430,7 @@ app.get('/api/temperatures', (req, res) => {
             COUNT(*) as reading_count
         FROM temperature_readings
         ${query}
-    `;
-
-    const params = [startDate, endDate];
+    `;    const params = [startDate, endDate];
 
     if (location) {
         const deviceIds = getDeviceIdsForLocation(location as string);
