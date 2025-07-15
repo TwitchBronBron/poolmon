@@ -476,7 +476,6 @@
             <div class="period-buttons">
                 <button class="period-btn active" data-period="hourly">Hourly</button>
                 <button class="period-btn" data-period="day">Day</button>
-                <button class="period-btn" data-period="week">Week</button>
                 <button class="period-btn" data-period="month">Month</button>
                 <button class="period-btn" data-period="year">Year</button>
             </div>
@@ -523,7 +522,7 @@
         let readingsExpanded = false; // Track if readings table is expanded
 
         // Calculate date range for a given period
-        // period: 'hourly', 'day', 'week', 'month', 'year'
+        // period: 'hourly', 'day', 'month', 'year'
         // referenceDate: the date to calculate from (defaults to now)
         // offset: number of periods to offset (0 = current, -1 = previous, 1 = next)
         function getDateRange(period, referenceDate = new Date(), offset = 0) {
@@ -544,14 +543,6 @@
                     start.setDate(start.getDate() + offset);
                     end = new Date(start);
                     end.setDate(end.getDate() + 1);
-                    break;
-                case 'week':
-                    start = new Date(refDate);
-                    start.setDate(start.getDate() - start.getDay()); // Start of week (Sunday)
-                    start.setHours(0, 0, 0, 0);
-                    start.setDate(start.getDate() + (offset * 7));
-                    end = new Date(start);
-                    end.setDate(end.getDate() + 7);
                     break;
                 case 'month':
                     start = new Date(refDate.getFullYear(), refDate.getMonth() + offset, 1);
@@ -681,7 +672,6 @@
                             });
                             break;
                         case 'month':
-                        case 'week':
                             formattedDate = date.toLocaleDateString('en-US', {
                                 year: 'numeric',
                                 month: 'short',
@@ -749,8 +739,8 @@
                 const monthEnd = new Date(readingDate.getFullYear(), readingDate.getMonth() + 1, 1);
                 currentStartDate = monthStart;
                 currentEndDate = monthEnd;
-            } else if (currentPeriod === 'month' || currentPeriod === 'week') {
-                // Month/Week -> Day: Navigate to the specific day
+            } else if (currentPeriod === 'month') {
+                // Month -> Day: Navigate to the specific day
                 currentPeriod = 'day';
                 const dayStart = new Date(readingDate.getFullYear(), readingDate.getMonth(), readingDate.getDate());
                 const dayEnd = new Date(dayStart);
@@ -844,33 +834,6 @@
                     }
 
                     return `${dayName} ${monthDay}`;
-
-                case 'week':
-                    const weekStartDate = currentStartDate.toLocaleDateString('en-US', {
-                        month: 'long',
-                        day: 'numeric'
-                    });
-                    const weekEndDate = new Date(currentEndDate.getTime() - 1); // End date minus 1 day to get last day of week
-                    const weekEndFormatted = weekEndDate.toLocaleDateString('en-US', {
-                        day: 'numeric'
-                    });
-                    const yearFormatted = weekEndDate.toLocaleDateString('en-US', {
-                        year: 'numeric'
-                    });
-                    const weekText = `${weekStartDate}-${weekEndFormatted}, ${yearFormatted}`;
-
-                    if (isCurrentRange) return `${weekText} (this week)`;
-
-                    // Check if it's last week
-                    const lastWeekStart = new Date(now);
-                    lastWeekStart.setDate(lastWeekStart.getDate() - lastWeekStart.getDay() - 7);
-                    lastWeekStart.setHours(0, 0, 0, 0);
-
-                    if (currentStartDate.getTime() === lastWeekStart.getTime()) {
-                        return `${weekText} (last week)`;
-                    }
-
-                    return weekText;
 
                 case 'month':
                     const monthText = currentStartDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
@@ -990,7 +953,6 @@
                         const ampm = hours >= 12 ? 'PM' : 'AM';
                         const displayHours = hours % 12 || 12;
                         return `${displayHours}:00 ${ampm}`;
-                    case 'week':
                     case 'month':
                         return date.toLocaleDateString();
                     case 'year':

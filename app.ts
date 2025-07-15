@@ -398,12 +398,6 @@ app.get('/api/temperatures', (req, res) => {
             groupBy = "strftime('%Y-%m-%d %H', timestamp)";
             query = `WHERE timestamp >= ? AND timestamp <= ? `;
             break;
-        case 'week':
-            // Group by day for weekly view
-            dateFormat = "strftime('%Y-%m-%dT00:00:00.000Z', timestamp)";
-            groupBy = "strftime('%Y-%m-%d', timestamp)";
-            query = `WHERE timestamp >= ? AND timestamp <= ? `;
-            break;
         case 'month':
             // Group by day for monthly view
             dateFormat = "strftime('%Y-%m-%dT00:00:00.000Z', timestamp)";
