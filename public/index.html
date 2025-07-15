@@ -522,42 +522,49 @@
         let currentEndDate = null; // Will be calculated based on period
         let readingsExpanded = false; // Track if readings table is expanded
 
-        // Calculate date range for current period
-        function getCurrentDateRange(period) {
-            const now = new Date();
+        // Calculate date range for a given period
+        // period: 'hourly', 'day', 'week', 'month', 'year'
+        // referenceDate: the date to calculate from (defaults to now)
+        // offset: number of periods to offset (0 = current, -1 = previous, 1 = next)
+        function getDateRange(period, referenceDate = new Date(), offset = 0) {
+            const refDate = new Date(referenceDate);
             let start, end;
 
             switch (period) {
                 case 'hourly':
-                    start = new Date(now);
+                    start = new Date(refDate);
                     start.setMinutes(0, 0, 0);
+                    start.setHours(start.getHours() + offset);
                     end = new Date(start);
                     end.setHours(end.getHours() + 1);
                     break;
                 case 'day':
-                    start = new Date(now);
+                    start = new Date(refDate);
                     start.setHours(0, 0, 0, 0);
+                    start.setDate(start.getDate() + offset);
                     end = new Date(start);
                     end.setDate(end.getDate() + 1);
                     break;
                 case 'week':
-                    start = new Date(now);
-                    start.setDate(start.getDate() - start.getDay()); // Start of current week (Sunday)
+                    start = new Date(refDate);
+                    start.setDate(start.getDate() - start.getDay()); // Start of week (Sunday)
                     start.setHours(0, 0, 0, 0);
+                    start.setDate(start.getDate() + (offset * 7));
                     end = new Date(start);
                     end.setDate(end.getDate() + 7);
                     break;
                 case 'month':
-                    start = new Date(now.getFullYear(), now.getMonth(), 1);
-                    end = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+                    start = new Date(refDate.getFullYear(), refDate.getMonth() + offset, 1);
+                    end = new Date(refDate.getFullYear(), refDate.getMonth() + offset + 1, 1);
                     break;
                 case 'year':
-                    start = new Date(now.getFullYear(), 0, 1);
-                    end = new Date(now.getFullYear() + 1, 0, 1);
+                    start = new Date(refDate.getFullYear() + offset, 0, 1);
+                    end = new Date(refDate.getFullYear() + offset + 1, 0, 1);
                     break;
                 default:
-                    start = new Date(now);
+                    start = new Date(refDate);
                     start.setHours(0, 0, 0, 0);
+                    start.setDate(start.getDate() + offset);
                     end = new Date(start);
                     end.setDate(end.getDate() + 1);
             }
@@ -565,68 +572,23 @@
             return { start, end };
         }
 
+        // Calculate date range for current period (backwards compatibility)
+        function getCurrentDateRange(period) {
+            return getDateRange(period);
+        }
+
         // Navigate to previous period
         function navigateToPrevious() {
-            const start = new Date(currentStartDate);
-            const end = new Date(currentEndDate);
-
-            switch (currentPeriod) {
-                case 'hourly':
-                    start.setHours(start.getHours() - 1);
-                    end.setHours(end.getHours() - 1);
-                    break;
-                case 'day':
-                    start.setDate(start.getDate() - 1);
-                    end.setDate(end.getDate() - 1);
-                    break;
-                case 'week':
-                    start.setDate(start.getDate() - 7);
-                    end.setDate(end.getDate() - 7);
-                    break;
-                case 'month':
-                    start.setMonth(start.getMonth() - 1);
-                    end.setMonth(end.getMonth() - 1);
-                    break;
-                case 'year':
-                    start.setFullYear(start.getFullYear() - 1);
-                    end.setFullYear(end.getFullYear() - 1);
-                    break;
-            }
-
-            currentStartDate = start;
-            currentEndDate = end;
+            const range = getDateRange(currentPeriod, currentStartDate, -1);
+            currentStartDate = range.start;
+            currentEndDate = range.end;
         }
 
         // Navigate to next period
         function navigateToNext() {
-            const start = new Date(currentStartDate);
-            const end = new Date(currentEndDate);
-
-            switch (currentPeriod) {
-                case 'hourly':
-                    start.setHours(start.getHours() + 1);
-                    end.setHours(end.getHours() + 1);
-                    break;
-                case 'day':
-                    start.setDate(start.getDate() + 1);
-                    end.setDate(end.getDate() + 1);
-                    break;
-                case 'week':
-                    start.setDate(start.getDate() + 7);
-                    end.setDate(end.getDate() + 7);
-                    break;
-                case 'month':
-                    start.setMonth(start.getMonth() + 1);
-                    end.setMonth(end.getMonth() + 1);
-                    break;
-                case 'year':
-                    start.setFullYear(start.getFullYear() + 1);
-                    end.setFullYear(end.getFullYear() + 1);
-                    break;
-            }
-
-            currentStartDate = start;
-            currentEndDate = end;
+            const range = getDateRange(currentPeriod, currentStartDate, 1);
+            currentStartDate = range.start;
+            currentEndDate = range.end;
         }
 
         // Check if we're viewing the current period (to prevent future navigation)
