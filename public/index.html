@@ -832,8 +832,8 @@
                 case 'hourly':
                     startTime = new Date(now.getTime() - ((offset + 1) * 60 * 60 * 1000));
                     endTime = new Date(now.getTime() - (offset * 60 * 60 * 1000));
-                    result = dateFns.format(startTime, 'iii LLL d, H:mmaaa');
-                    result += ' - ' + dateFns.format(endTime, 'H:mmaaa');
+                    result = dateFns.format(startTime, 'iii LLL d, h:mmaaa');
+                    result += ' - ' + dateFns.format(endTime, 'h:mmaaa');
                     break;
 
                 case 'day':
@@ -986,11 +986,11 @@
             if (currentPeriod === 'day' || currentPeriod === 'hourly') {
                 const dayChangeIndices = [];
                 let currentDay = null;
-                
+
                 allTimestamps.forEach((timestamp, index) => {
                     const date = new Date(timestamp);
                     const dayKey = date.toDateString();
-                    
+
                     if (currentDay && currentDay !== dayKey) {
                         dayChangeIndices.push(index);
                     }
