@@ -517,11 +517,45 @@
     <script src="https://cdn.jsdelivr.net/npm/date-fns@4.1.0/cdn.min.js"></script>
     <script>
         let temperatureChart;
-        let currentPeriod = 'hourly';
+        let currentPeriod = 'day';
         let currentStartDate = null; // Will be calculated based on period
         let currentEndDate = null; // Will be calculated based on period
         let currentOffset = 0; // Track how many periods back we are
         let readingsExpanded = false; // Track if readings table is expanded
+
+        // Initialize the app
+        document.addEventListener('DOMContentLoaded', function() {
+            selectPeriod(currentPeriod);
+
+            // Initialize current date range
+            initializeDateRange();
+            loadData();
+
+            // Set up event listeners
+            document.querySelectorAll('.period-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    selectPeriod(this.dataset.period);
+                });
+            });
+
+            document.getElementById('prevBtn').addEventListener('click', function() {
+                navigateToPrevious();
+                loadData();
+            });
+
+            document.getElementById('nextBtn').addEventListener('click', function() {
+                // Don't allow navigating into the future
+                if (!isCurrentPeriod()) {
+                    navigateToNext();
+                    loadData();
+                }
+            });
+
+            // Auto-refresh every 30 seconds
+            setInterval(() => {
+                loadData();
+            }, 30000);
+        });
 
         // Calculate date range for a given period using rolling windows
         // period: 'hourly', 'day', 'month', 'year'
@@ -765,43 +799,16 @@
             loadData();
         }
 
-        // Initialize the app
-        document.addEventListener('DOMContentLoaded', function() {
-            // Initialize current date range
-            initializeDateRange();
+
+        function selectPeriod(period){
+            // Update active button
+            const buttons = [...document.querySelectorAll('.period-btn')];
+            buttons.forEach(b => b.classList.remove('active'));
+            buttons.find(x=> x.dataset.period === period).classList.add('active');
+            currentPeriod = period;
+            initializeDateRange(); // Reset to current period
             loadData();
-
-            // Set up event listeners
-            document.querySelectorAll('.period-btn').forEach(btn => {
-                btn.addEventListener('click', function() {
-                    // Update active button
-                    document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
-                    this.classList.add('active');
-
-                    currentPeriod = this.dataset.period;
-                    initializeDateRange(); // Reset to current period
-                    loadData();
-                });
-            });
-
-            document.getElementById('prevBtn').addEventListener('click', function() {
-                navigateToPrevious();
-                loadData();
-            });
-
-            document.getElementById('nextBtn').addEventListener('click', function() {
-                // Don't allow navigating into the future
-                if (!isCurrentPeriod()) {
-                    navigateToNext();
-                    loadData();
-                }
-            });
-
-            // Auto-refresh every 30 seconds
-            setInterval(() => {
-                loadData();
-            }, 30000);
-        });
+        }
 
         function getPeriodLabel() {
             const offset = currentOffset || 0;
