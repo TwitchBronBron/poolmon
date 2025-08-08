@@ -393,9 +393,9 @@ app.get('/api/temperatures', (req, res) => {
             return;
 
         case 'day':
-            // Group by hour for daily view
-            dateFormat = "strftime('%Y-%m-%dT%H:00:00.000Z', timestamp)";
-            groupBy = "strftime('%Y-%m-%d %H', timestamp)";
+            // Group by 30-minute intervals for daily view
+            dateFormat = "strftime('%Y-%m-%dT%H:', timestamp) || printf('%02d', (strftime('%M', timestamp) / 30) * 30) || ':00.000Z'";
+            groupBy = "strftime('%Y-%m-%d %H', timestamp), (strftime('%M', timestamp) / 30)";
             query = `WHERE timestamp >= ? AND timestamp <= ? `;
             break;
         case 'month':
