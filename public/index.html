@@ -517,7 +517,13 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation"></script>
     <script src="https://cdn.jsdelivr.net/npm/date-fns@4.1.0/cdn.min.js"></script>
+    <script>
+        // Register the annotation plugin
+        Chart.register(ChartjsPluginAnnotation);
+    </script>
     <script>
         let temperatureChart;
         let currentPeriod = 'day';
@@ -975,6 +981,39 @@
                 return reading ? reading.temperature : null;
             });
 
+            // Create day change annotations for day and hourly views
+            const annotations = {};
+            if (currentPeriod === 'day' || currentPeriod === 'hourly') {
+                const dayChangeIndices = [];
+                let currentDay = null;
+                
+                allTimestamps.forEach((timestamp, index) => {
+                    const date = new Date(timestamp);
+                    const dayKey = date.toDateString();
+                    
+                    if (currentDay && currentDay !== dayKey) {
+                        dayChangeIndices.push(index);
+                    }
+                    currentDay = dayKey;
+                });
+
+                // Add vertical lines for day changes
+                dayChangeIndices.forEach((index, i) => {
+                    annotations[`dayChange${i}`] = {
+                        type: 'line',
+                        xMin: index,
+                        xMax: index,
+                        borderColor: 'rgba(255, 99, 132, 0.8)',
+                        borderWidth: 2,
+                        borderDash: [5, 5],
+                        label: {
+                            content: 'Day Change',
+                            enabled: false
+                        }
+                    };
+                });
+            }
+
             temperatureChart = new Chart(ctx, {
                 type: 'line',
                 data: {
@@ -1015,6 +1054,9 @@
                         legend: {
                             display: true,
                             position: 'top'
+                        },
+                        annotation: {
+                            annotations: annotations
                         }
                     },
                     scales: {
