@@ -116,7 +116,8 @@
         .stat-label {
             font-size: 0.9em;
             color: #666;
-            margin-top: 5px;
+            margin-bottom: 5px;
+            font-weight: bold;
         }
 
         .period-buttons {
@@ -418,14 +419,16 @@
                 <h3>Current Temperatures</h3>
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
                     <div style="text-align: center;">
-                        <div class="temperature-display pool-temp-display" id="poolTemp">
-                            --<span class="temperature-unit">°F</span>
+                        <div class="temperature-display pool-temp-display">
+                            <span id="poolTemp">--</span>
+                            <span class="temperature-unit">°F</span>
                         </div>
                         <div class="pool-color" style="font-weight: 600;">Pool</div>
                     </div>
                     <div style="text-align: center;">
-                        <div class="temperature-display outside-temp-display" id="outsideTemp">
-                            --<span class="temperature-unit">°F</span>
+                        <div class="temperature-display outside-temp-display">
+                            <span id="outsideTemp" class="temperature-value">--</span>
+                            <span class="temperature-unit">°F</span>
                         </div>
                         <div class="outside-color" style="font-weight: 600;">Outside</div>
                     </div>
@@ -446,25 +449,25 @@
                 </div>
                 <div class="stats-grid">
                     <div class="stat-item">
+                        <div class="stat-label">Average</div>
                         <div style="display: flex; flex-direction: column; gap: 5px;">
                             <div class="stat-value pool-color" id="poolAvgTemp">--</div>
                             <div class="stat-value outside-color" id="outsideAvgTemp">--</div>
                         </div>
-                        <div class="stat-label">Average</div>
                     </div>
                     <div class="stat-item">
+                        <div class="stat-label">Minimum</div>
                         <div style="display: flex; flex-direction: column; gap: 5px;">
                             <div class="stat-value pool-color" id="poolMinTemp">--</div>
                             <div class="stat-value outside-color" id="outsideMinTemp">--</div>
                         </div>
-                        <div class="stat-label">Minimum</div>
                     </div>
                     <div class="stat-item">
+                        <div class="stat-label">Maximum</div>
                         <div style="display: flex; flex-direction: column; gap: 5px;">
                             <div class="stat-value pool-color" id="poolMaxTemp">--</div>
                             <div class="stat-value outside-color" id="outsideMaxTemp">--</div>
                         </div>
-                        <div class="stat-label">Maximum</div>
                     </div>
                 </div>
             </div>
@@ -883,11 +886,9 @@
                 const outsideResponse = await fetch('/api/temperatures/latest?location=outside');
                 const outsideData = await outsideResponse.json();
 
-                document.getElementById('poolTemp').innerHTML =
-                    poolData.temperature ? `${poolData.temperature.toFixed(1)}<span class="temperature-unit">°F</span>` : '--<span class="temperature-unit">°F</span>';
+                document.getElementById('poolTemp').innerHTML = poolData.temperature?.toFixed(1) ?? '--';
 
-                document.getElementById('outsideTemp').innerHTML =
-                    outsideData.temperature ? `${outsideData.temperature.toFixed(1)}<span class="temperature-unit">°F</span>` : '--<span class="temperature-unit">°F</span>';
+                document.getElementById('outsideTemp').innerHTML = outsideData.temperature?.toFixed(1) ?? '--';
 
                 // Update chart first (higher priority)
                 await updateChart();
