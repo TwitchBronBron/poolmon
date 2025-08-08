@@ -514,6 +514,7 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/date-fns@4.1.0/cdn.min.js"></script>
     <script>
         let temperatureChart;
         let currentPeriod = 'hourly';
@@ -805,80 +806,49 @@
         function getPeriodLabel() {
             const offset = currentOffset || 0;
             const now = new Date();
+            // Round down to the floor minute
+            now.setSeconds(0, 0);
             const isLatest = offset === 0;
 
-            // Helper function to format start time for a given period
-            function formatStartTime(period, offset) {
-                let startTime, duration, durationText;
+            let result, startTime, duration, durationText;
 
-                switch (period) {
-                    case 'hourly':
-                        startTime = new Date(now.getTime() - ((offset + 1) * 60 * 60 * 1000));
-                        durationText = '(+60min)';
-                        // Round down to the floor minute
-                        startTime.setSeconds(0, 0);
-                        return {
-                            startFormat: startTime.toLocaleDateString('en-US', {
-                                weekday: 'short',
-                                month: 'short',
-                                day: 'numeric'
-                            }) + ', ' + startTime.toLocaleTimeString('en-US', {
-                                hour: 'numeric',
-                                minute: '2-digit',
-                                hour12: true
-                            }),
-                            durationText
-                        };
+            switch (currentPeriod) {
+                case 'hourly':
+                    startTime = new Date(now.getTime() - ((offset + 1) * 60 * 60 * 1000));
+                    endTime = new Date(now.getTime() - (offset * 60 * 60 * 1000));
+                    result = dateFns.format(startTime, 'iii LLL d, H:mmaaa');
+                    result += ' - ' + dateFns.format(endTime, 'H:mmaaa');
+                    break;
 
-                    case 'day':
-                        startTime = new Date(now.getTime() - ((offset + 1) * 24 * 60 * 60 * 1000));
-                        durationText = '(+24h)';
-                        startTime.setSeconds(0, 0);
-                        return {
-                            startFormat: startTime.toLocaleDateString('en-US', {
-                                weekday: 'short',
-                                month: 'short',
-                                day: 'numeric'
-                            }) + ', ' + startTime.toLocaleTimeString('en-US', {
-                                hour: 'numeric',
-                                minute: '2-digit',
-                                hour12: true
-                            }),
-                            durationText
-                        };
+                case 'day':
+                    startTime = new Date(now.getTime() - ((offset + 1) * 24 * 60 * 60 * 1000));
+                    endTime = new Date(now.getTime() - (offset * 24 * 60 * 60 * 1000));
+                    result = dateFns.format(startTime, 'iii LLL d');
+                    result += ' - ' + dateFns.format(endTime, 'iii LLL d');
+                    break;
 
-                    case 'month':
-                        startTime = new Date(now.getTime() - ((offset + 1) * 31 * 24 * 60 * 60 * 1000));
-                        durationText = '(+31d)';
-                        return {
-                            startFormat: startTime.toLocaleDateString('en-US', {
-                                weekday: 'short',
-                                month: 'short',
-                                day: 'numeric'
-                            }),
-                            durationText
-                        };
+                case 'month':
+                    startTime = new Date(now.getTime() - ((offset + 1) * 31 * 24 * 60 * 60 * 1000));
+                    endTime = new Date(now.getTime() - (offset * 31 * 24 * 60 * 60 * 1000));
+                    result = dateFns.format(startTime, 'iii LLL d');
+                    result += ' - ' + dateFns.format(endTime, 'iii LLL d');
+                    break;
 
-                    case 'year':
-                        startTime = new Date(now.getTime() - ((offset + 1) * 365 * 24 * 60 * 60 * 1000));
-                        durationText = '(+12mo)';
-                        return {
-                            startFormat: startTime.toLocaleDateString('en-US', {
-                                month: 'short',
-                                year: 'numeric'
-                            }),
-                            durationText
-                        };
 
-                    default:
-                        return { startFormat: 'Unknown Period', durationText: '' };
-                }
+                case 'year':
+                    startTime = new Date(now.getTime() - ((offset + 1) * 365 * 24 * 60 * 60 * 1000));
+                    endTime = new Date(now.getTime() - (offset + 1 * 365 * 24 * 60 * 60 * 1000));
+                    result = dateFns.format(startTime, 'iii LLL q, yyyy');
+                    result += ' - ' + dateFns.format(endTime, 'iii LLL q, yyyy');
+                    break;
+
+                default:
+                    return 'Unknown Period';
             }
-
-            const { startFormat, durationText } = formatStartTime(currentPeriod, offset);
-            const latestIndicator = isLatest ? ' (latest)' : '';
-
-            return `${startFormat} ${durationText}${latestIndicator}`;
+            if (isLatest) {
+                result += ' (now)';
+            }
+            return result;
         }
 
         function updateNavigationButtons() {
@@ -893,7 +863,7 @@
             currentStartDate = range.start;
             currentEndDate = range.end;
 
-            document.getElementById('currentPeriod').textContent = getPeriodLabel();
+            document.getElementById('currentPeriod').innerHTML = getPeriodLabel();
 
             const startDateParam = currentStartDate.toISOString();
             const endDateParam = currentEndDate.toISOString();
