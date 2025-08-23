@@ -398,6 +398,12 @@ app.get('/api/temperatures', (req, res) => {
             groupBy = "strftime('%Y-%m-%d %H', timestamp), (strftime('%M', timestamp) / 30)";
             query = `WHERE timestamp >= ? AND timestamp <= ? `;
             break;
+        case 'week':
+            // Group by 4-hour intervals for weekly view (6 intervals per day * 7 days = 42 data points)
+            dateFormat = "strftime('%Y-%m-%dT', timestamp) || printf('%02d', (strftime('%H', timestamp) / 4) * 4) || ':00:00.000Z'";
+            groupBy = "strftime('%Y-%m-%d', timestamp), (strftime('%H', timestamp) / 4)";
+            query = `WHERE timestamp >= ? AND timestamp <= ? `;
+            break;
         case 'month':
             // Group by day for monthly view
             dateFormat = "strftime('%Y-%m-%dT00:00:00.000Z', timestamp)";

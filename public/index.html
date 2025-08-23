@@ -371,6 +371,8 @@
 
             .chart-container {
                 padding: 15px;
+                height: 350px;
+                margin-top: 15px;
             }
 
             .readings-table {
@@ -479,6 +481,7 @@
             <div class="period-buttons">
                 <button class="period-btn active" data-period="hourly">Hourly</button>
                 <button class="period-btn" data-period="day">Day</button>
+                <button class="period-btn" data-period="week">Week</button>
                 <button class="period-btn" data-period="month">Month</button>
                 <button class="period-btn" data-period="year">Year</button>
             </div>
@@ -587,6 +590,14 @@
                     // Past 24 hours from reference time, offset by days
                     end = new Date(refDate.getTime() - (offset * 24 * 60 * 60 * 1000));
                     start = new Date(end.getTime() - (24 * 60 * 60 * 1000));
+                    // Round down to the floor minute
+                    start.setSeconds(0, 0);
+                    end.setSeconds(0, 0);
+                    break;
+                case 'week':
+                    // Past 7 days from reference time, offset by 7-day periods
+                    end = new Date(refDate.getTime() - (offset * 7 * 24 * 60 * 60 * 1000));
+                    start = new Date(end.getTime() - (7 * 24 * 60 * 60 * 1000));
                     // Round down to the floor minute
                     start.setSeconds(0, 0);
                     end.setSeconds(0, 0);
@@ -736,6 +747,15 @@
                                 hour12: true
                             });
                             break;
+                        case 'week':
+                            formattedDate = date.toLocaleDateString('en-US', {
+                                year: 'numeric',
+                                month: 'short',
+                                day: 'numeric',
+                                hour: 'numeric',
+                                hour12: true
+                            });
+                            break;
                         case 'hourly':
                             formattedDate = date.toLocaleDateString('en-US', {
                                 year: 'numeric',
@@ -786,7 +806,11 @@
                 currentPeriod = 'month';
                 currentOffset = 0; // Reset to current month period
             } else if (currentPeriod === 'month') {
-                // Month -> Day: Navigate to day view
+                // Month -> Week: Navigate to week view
+                currentPeriod = 'week';
+                currentOffset = 0; // Reset to current week period
+            } else if (currentPeriod === 'week') {
+                // Week -> Day: Navigate to day view
                 currentPeriod = 'day';
                 currentOffset = 0; // Reset to current day period
             } else if (currentPeriod === 'day') {
@@ -839,6 +863,13 @@
                 case 'day':
                     startTime = new Date(now.getTime() - ((offset + 1) * 24 * 60 * 60 * 1000));
                     endTime = new Date(now.getTime() - (offset * 24 * 60 * 60 * 1000));
+                    result = dateFns.format(startTime, 'iii LLL d');
+                    result += ' - ' + dateFns.format(endTime, 'iii LLL d');
+                    break;
+
+                case 'week':
+                    startTime = new Date(now.getTime() - ((offset + 1) * 7 * 24 * 60 * 60 * 1000));
+                    endTime = new Date(now.getTime() - (offset * 7 * 24 * 60 * 60 * 1000));
                     result = dateFns.format(startTime, 'iii LLL d');
                     result += ' - ' + dateFns.format(endTime, 'iii LLL d');
                     break;
@@ -961,6 +992,14 @@
                         const ampm = hours >= 12 ? 'PM' : 'AM';
                         const displayHours = hours % 12 || 12;
                         return minutes === 0 ? `${displayHours}:00 ${ampm}` : `${displayHours}:${minutes.toString().padStart(2, '0')} ${ampm}`;
+                    case 'week':
+                        // Only show labels for midnight points to reduce clutter
+                        if (date.getHours() === 0) {
+                            const dayOfWeek = date.toLocaleDateString('en-US', { weekday: 'short' });
+                            return dayOfWeek;
+                        } else {
+                            return ''; // Empty string for non-midnight points
+                        }
                     case 'month':
                         return date.toLocaleDateString();
                     case 'year':
@@ -981,7 +1020,7 @@
                 return reading ? reading.temperature : null;
             });
 
-            // Create day change annotations for day and hourly views
+            // Create day change annotations for day and hourly views, and week start annotations for week view
             const annotations = {};
             if (currentPeriod === 'day' || currentPeriod === 'hourly') {
                 const dayChangeIndices = [];
@@ -1009,6 +1048,38 @@
                         label: {
                             content: 'Day Change',
                             enabled: false
+                        }
+                    };
+                });
+            } else if (currentPeriod === 'week') {
+                // Add green dotted line for week start (Sunday at midnight)
+                const weekStartIndices = [];
+
+                allTimestamps.forEach((timestamp, index) => {
+                    const date = new Date(timestamp);
+                    // Check if this is Sunday at midnight (or close to it due to 4-hour grouping)
+                    if (date.getDay() === 0 && date.getHours() === 0) {
+                        weekStartIndices.push(index);
+                    }
+                });
+
+                // Add vertical green dotted lines for week starts (same thickness as day changes)
+                weekStartIndices.forEach((index, i) => {
+                    annotations[`weekStart${i}`] = {
+                        type: 'line',
+                        xMin: index,
+                        xMax: index,
+                        borderColor: 'rgba(40, 167, 69, 0.8)', // Green color
+                        borderWidth: 2, // Same thickness as day changes
+                        borderDash: [5, 5], // Same dotted pattern as day changes
+                        label: {
+                            content: 'Week Start',
+                            enabled: true,
+                            position: 'start',
+                            backgroundColor: 'rgba(40, 167, 69, 0.8)',
+                            color: 'white',
+                            padding: 4,
+                            borderRadius: 3
                         }
                     };
                 });
@@ -1050,6 +1121,11 @@
                     responsive: true,
                     maintainAspectRatio: false,
                     animation: false,
+                    layout: {
+                        padding: {
+                            bottom: 10
+                        }
+                    },
                     plugins: {
                         legend: {
                             display: true,
@@ -1074,7 +1150,13 @@
                         x: {
                             grid: {
                                 color: 'rgba(0, 0, 0, 0.1)'
-                            }
+                            },
+                            ticks: currentPeriod === 'week' ? {
+                                maxRotation: 45,
+                                minRotation: 0,
+                                autoSkip: false,
+                                maxTicksLimit: 20
+                            } : {}
                         }
                     },
                     elements: {
