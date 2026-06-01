@@ -259,6 +259,91 @@ function insertDataBatch(data: any[]): Promise<void> {
     });
 }
 
+// Maximum physically plausible rate of temperature change, in °F per minute.
+// Air temp can swing ~1°F/min in extremes; pool water changes far slower. We
+// allow 5x this as the rejection threshold to leave generous headroom for real
+// readings while still catching sensor glitches (e.g. 20°F jumping to 180°F).
+const MAX_TEMP_CHANGE_PER_MINUTE = 5; // 5°F/min cap (1°F/min physical * 5x)
+
+// Minimum elapsed time used when computing the allowed change. Guards against
+// tiny (or zero) gaps between readings producing a near-zero allowance that
+// would reject everything. One minute matches the normal recording interval.
+const MIN_ELAPSED_MINUTES = 1;
+
+// The DS18B20 power-on reset value is exactly 85.000°C, which converts to
+// exactly 185°F. The sensor emits this when it powers up before taking a real
+// measurement (e.g. after the system has been offline), so it can slip through
+// the rate-of-change check after a long gap. record-temp.sh already filters the
+// raw 85000 value at the source; this is a defensive backstop for any other
+// poster. The other failure sentinel (raw 0 = disconnected) converts to 32°F,
+// which is a legitimate temperature, so it can ONLY be caught upstream in raw
+// units and is intentionally not matched here.
+const SENSOR_RESET_VALUE_F = 185;
+
+// Fetch the most recent reading for a device that occurred at or before the
+// given timestamp. Returns null when the device has no prior reading.
+function getPreviousReading(deviceId: string, beforeTimestamp: string): Promise<{ temperature: number, timestamp: string } | null> {
+    return new Promise((resolve, reject) => {
+        db.get(
+            `SELECT temperature, timestamp
+             FROM temperature_readings
+             WHERE device_id = ? AND timestamp <= ?
+             ORDER BY timestamp DESC
+             LIMIT 1`,
+            [deviceId, beforeTimestamp],
+            (err, row: any) => {
+                if (err) {
+                    reject(err);
+                    return;
+                }
+                resolve(row || null);
+            }
+        );
+    });
+}
+
+// Decide whether a new reading is physically plausible relative to the previous
+// reading for the same device. The allowed change scales with how long ago the
+// previous reading was: the further apart in time, the larger a change we permit.
+// Returns { ok: true } to accept, or { ok: false, reason } to reject.
+function checkReadingPlausible(
+    temperature: number,
+    previous: { temperature: number, timestamp: string } | null,
+    newTimestamp: string
+): { ok: true } | { ok: false, reason: string } {
+    // The DS18B20 power-on reset value (185°F) is never a real reading, so
+    // reject it regardless of timing. This catches the sensor coming back from
+    // an outage reporting its reset value, which the rate check below can't
+    // catch because a long elapsed gap widens the allowed change.
+    if (temperature === SENSOR_RESET_VALUE_F) {
+        return {
+            ok: false,
+            reason: `Reading rejected: ${temperature}°F is the sensor's power-on reset value, not a real measurement.`
+        };
+    }
+
+    // No baseline to compare against — accept and let this become the reference.
+    if (!previous) {
+        return { ok: true };
+    }
+
+    const elapsedMs = new Date(newTimestamp).getTime() - new Date(previous.timestamp).getTime();
+    const elapsedMinutes = Math.max(MIN_ELAPSED_MINUTES, elapsedMs / 60000);
+    const allowedChange = MAX_TEMP_CHANGE_PER_MINUTE * elapsedMinutes;
+    const actualChange = Math.abs(temperature - previous.temperature);
+
+    if (actualChange > allowedChange) {
+        return {
+            ok: false,
+            reason: `Reading rejected as a likely sensor glitch: changed ${actualChange.toFixed(1)}°F ` +
+                `from ${previous.temperature}°F over ${elapsedMinutes.toFixed(1)} min ` +
+                `(max plausible change is ${allowedChange.toFixed(1)}°F).`
+        };
+    }
+
+    return { ok: true };
+}
+
 // Function to insert temperature reading with device ID
 function insertTemperatureReading(temperature: number, deviceId: string, timestamp?: string): Promise<{ id: number, timestamp: string }> {
     return new Promise((resolve, reject) => {
@@ -632,6 +717,18 @@ app.post('/api/temperature', async (req, res) => {
     }
 
     try {
+        // Reject readings that are physically implausible relative to the
+        // device's most recent reading (filters out sensor-bug spikes).
+        const actualTimestamp = timestamp || new Date().toISOString();
+        const previous = await getPreviousReading(deviceId, actualTimestamp);
+        const plausibility = checkReadingPlausible(temperature, previous, actualTimestamp);
+
+        if (!plausibility.ok) {
+            console.warn(`Rejected reading for ${deviceId} (${temperature}°F): ${plausibility.reason}`);
+            res.status(422).json({ error: plausibility.reason });
+            return;
+        }
+
         const result = await insertTemperatureReading(temperature, deviceId, timestamp);
         res.json({
             id: result.id,
