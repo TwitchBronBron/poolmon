@@ -710,6 +710,15 @@ app.post('/api/temperature', async (req, res) => {
         return;
     }
 
+    // Reject readings from unknown devices. The 1-wire bus can enumerate
+    // phantom/corrupted device IDs that produce garbage; only the known sensors
+    // in SENSOR_LOCATIONS are valid. (record-temp.sh skips these at the source;
+    // this is a backstop for any other poster.)
+    if (getLocationFromDeviceId(deviceId) === null) {
+        res.status(422).json({ error: `Unknown device ID: ${deviceId}. Not a recognized sensor.` });
+        return;
+    }
+
     // Validate timestamp if provided
     if (timestamp && (typeof timestamp !== 'string' || isNaN(new Date(timestamp).getTime()))) {
         res.status(400).json({ error: 'Timestamp must be a valid ISO 8601 date string' });

@@ -2,9 +2,22 @@
 API_URL="http://192.168.1.8:3004/api/temperature"
 timestamp=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
 
+# Known real sensors. The 1-wire bus occasionally enumerates phantom/corrupted
+# device folders (junk IDs like 28-0a0014745c8c) that produce garbage readings.
+# We only read from these known IDs and skip anything else.
+KNOWN_SENSORS="28-012054745c8c 28-012054899557" # pool, outside
+
+is_known_sensor() {
+    for known in $KNOWN_SENSORS; do
+        [ "$1" = "$known" ] && return 0
+    done
+    return 1
+}
+
 sensor_count=0
 for device in /sys/bus/w1/devices/28*; do
     [ -d "$device" ] || continue
+    is_known_sensor "$(basename "$device")" || continue
     sensor_count=$((sensor_count + 1))
 done
 echo "$(date '+%H:%M:%S') - found $sensor_count sensor(s)"
@@ -12,6 +25,12 @@ echo "$(date '+%H:%M:%S') - found $sensor_count sensor(s)"
 for device in /sys/bus/w1/devices/28*; do
     [ -d "$device" ] || continue
     device_id=$(basename "$device")
+
+    # Skip phantom/unknown bus devices; only record the known sensors.
+    if ! is_known_sensor "$device_id"; then
+        echo "$(date '+%H:%M:%S') - $device_id - unknown sensor, skipping"
+        continue
+    fi
 
     temp_raw=""
     for attempt in $(seq 1 10); do
