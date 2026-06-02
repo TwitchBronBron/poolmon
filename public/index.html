@@ -537,11 +537,9 @@
 
         // Initialize the app
         document.addEventListener('DOMContentLoaded', function() {
+            // First load: no prior window exists, so this lands at the bleeding
+            // edge (offset 0) and loads the data.
             selectPeriod(currentPeriod);
-
-            // Initialize current date range
-            initializeDateRange();
-            loadData();
 
             // Set up event listeners
             document.querySelectorAll('.period-btn').forEach(btn => {
@@ -621,6 +619,45 @@
             return { start, end };
         }
 
+        // Width (in milliseconds) of a single window for the given period. The
+        // rolling-window model steps by exactly this much per offset, so it
+        // doubles as the "snap granularity" when translating a position from one
+        // period to another.
+        function getPeriodWidthMs(period) {
+            const HOUR = 60 * 60 * 1000;
+            const DAY = 24 * HOUR;
+            switch (period) {
+                case 'hourly': return HOUR;
+                case 'day':    return DAY;
+                case 'week':   return 7 * DAY;
+                case 'month':  return 31 * DAY;
+                case 'year':   return 365 * DAY;
+                default:       return DAY;
+            }
+        }
+
+        // Center time (ms) of the window currently being viewed. Used to carry
+        // our temporal position across a period switch.
+        function getCurrentCenterMs() {
+            if (!currentStartDate || !currentEndDate) {
+                return Date.now();
+            }
+            return (currentStartDate.getTime() + currentEndDate.getTime()) / 2;
+        }
+
+        // Given a target center time, return the integer offset whose window in
+        // `period` is centered closest to it. Offsets are whole periods back from
+        // now, so rounding here keeps us snapped to a real window boundary — that
+        // way the prev/next arrows always step cleanly without stranding a
+        // partial period at the edge. Never returns a negative (future) offset.
+        function offsetForCenter(period, targetCenterMs, referenceDate = new Date()) {
+            const width = getPeriodWidthMs(period);
+            // Center of the offset-0 window is now - width/2.
+            const latestCenterMs = referenceDate.getTime() - width / 2;
+            const offset = Math.round((latestCenterMs - targetCenterMs) / width);
+            return Math.max(0, offset);
+        }
+
 
         // Navigate to previous period
         function navigateToPrevious() {
@@ -643,14 +680,6 @@
         // Check if we're viewing the current period (offset 0)
         function isCurrentPeriod() {
             return (currentOffset || 0) === 0;
-        }
-
-        // Initialize date range for current period
-        function initializeDateRange() {
-            currentOffset = 0; // Reset to current period
-            const range = getDateRange(currentPeriod, new Date(), 0);
-            currentStartDate = range.start;
-            currentEndDate = range.end;
         }
 
         // Toggle readings table visibility
@@ -838,8 +867,32 @@
             const buttons = [...document.querySelectorAll('.period-btn')];
             buttons.forEach(b => b.classList.remove('active'));
             buttons.find(x=> x.dataset.period === period).classList.add('active');
+
+            // Decide where to land in the new period, preserving our position.
+            //
+            // If we're at the bleeding edge (offset 0 — the window's right edge is
+            // "now"), stay at the bleeding edge regardless of how wide the old
+            // window was. We can't use the window center here: a year window
+            // centered ~6 months ago would otherwise drag a finer view back into
+            // the past. The edge, not the midpoint, is what "now" means.
+            //
+            // Otherwise carry over the center of the window we were viewing and
+            // snap to the integer offset of the new period centered closest to it
+            // — e.g. mid-last-year -> ~mid-window of that year when going to month
+            // view, or mid-June -> the year that contains June when going to year
+            // view. Snapping to a whole offset keeps the prev/next arrows stepping
+            // cleanly with no stranded partial period at the edge.
+            const wasAtBleedingEdge = (currentOffset || 0) === 0;
+            const targetCenterMs = getCurrentCenterMs();
             currentPeriod = period;
-            initializeDateRange(); // Reset to current period
+            currentOffset = wasAtBleedingEdge
+                ? 0
+                : offsetForCenter(period, targetCenterMs, new Date());
+
+            const range = getDateRange(currentPeriod, new Date(), currentOffset);
+            currentStartDate = range.start;
+            currentEndDate = range.end;
+
             loadData();
         }
 
